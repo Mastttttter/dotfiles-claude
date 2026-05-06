@@ -1,6 +1,6 @@
 ---
 name: chrome-cdp
-description: Interact with local Chrome browser session (only on explicit user approval after being asked to inspect, debug, or interact with a page open in Chrome)
+description: Inspect and interact with a page open in the user's local Chrome session with shared cookies and login states. Use for headful browser automation. Requires explicit user approval.
 ---
 
 # Chrome CDP
@@ -11,7 +11,9 @@ Lightweight Chrome DevTools Protocol CLI. Connects directly via WebSocket — no
 
 MUST explicitly ask for user permission before use. Chrome CDP runs in a **headful browser** in user screen. Start using Chrome CDP without user confirmation is **offensive**. User refuse: PAUSE IMMEDIATELY.
 
-Use /agent-browser skill instead if you need headless access to web pages.
+The headful browser will be the Chrome that user uses everyday with cookies and login states. Social media interactions requires user confirm.
+
+Use /agent-browser skill instead if you need stateless and headless access to web pages.
 
 ## Prerequisites
 

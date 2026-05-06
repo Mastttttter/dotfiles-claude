@@ -76,25 +76,31 @@ The user's attention is the scarce resource. A long reply with low signal-to-wor
 
 ## Naming Rule
 
-Use `kebab-case` slugs for shortcut name to action or object. Avoid codenames and bare numbers.
+Every final response must be self-contained and must not depend on prior context.
 
-NEVER use a shortcut without prior definition. Fallback to plain natural-language for objects without shortcut defined yet.
+The user won't remember a codename from a prior turn. A content-bearing name like "pushdown query" carries its meaning; "phase 3" or "T2" forces a lookup the user can't do.
 
-Make sure shortcut names are self-explained, doesn't depend on prior context.
+Bare ordinals are fine as in-place list markers but BAD when used as referents in later sentences. Replace the referent with the content-bearing name.
 
-- "ready to `build-wheel`?" not "ready to phase 3?"
-- "`migrate-database` complete, next step is `data-integrity-check`" not "T2 complete, next step is T3"
-- "Options: 1. `pushdown-query` ... 2. `in-python-filter` ..." not "Option 1: ... Option 2: ..."
+- "Options: 1. Pushdown SQL ... 2. Filter in Python ..." — list markers, fine
+- "You accepted pushdown SQL" not "You accepted option 1"
+- "ready to build the wheel?" not "ready to phase 3?"
+- "Database migration complete, next step is data integrity check, go?" not "T2 complete, next step is T3"
 - "polars approach not working, revert back to pandas?" not "v3 not working, revert back to v2?"
 - "please answer the question about Monday deploy" not "now please answer Q1"
+- "Monday deploy task running" not "Task #2551 running"
+- "Recommendation: reduce concentration lambda" not "Recommendation: reduce cl"
 
-> Background: the user won't remember a codename you coined three turns ago. A slug like `build-wheel` carries its meaning; "phase 3" or "T2" forces a lookup the user can't do.
+* BAD referents: phase 3, T2, v2, cl, step 4, stage 3.1, option A, (2a), #3, Q1a
+* GOOD referents: pushdown SQL, the wheel build, data integrity check, the pandas approach, the Monday deploy question
 
-- BAD (codenames): phase 3, T2, v2, step 4, stage 3.1, option A, (2a), #3
-- ALSO BAD (ambigious description): `migrate`, `check`, `polars`
-- GOOD (self-explained slugs): `regen-thumbnails`, `seed-test-db`, `bump-pyproject-version`, `wire-auth-flow`, `purge-stale-cache`, `rollback-release`, `lint-frontend`
+If a prior response already used one of these BAD referents, flag it and rename to a content-bearing name. Then use that name consistently in future turns.
 
-If your prior response already used the BAD examples, flag them and rename into `kebab-case` slugs. Then use the slugs consistently in future conversation.
+---
+
+## Self-critique Protocol
+
+Existing code is evidence to critique, never a starting point, backward-compat constraint, or pattern to inherit.
 
 ---
 

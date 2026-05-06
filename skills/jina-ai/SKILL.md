@@ -1,7 +1,7 @@
 ---
 name: jina-ai
 description: >
-  Web search with time-window and region/language filters, academic papers (arXiv/SSRN), PDF table/figure extraction, BibTeX, image search, web page reading, embeddings, reranking, classification, and deduplication (text or images) via Jina AI. This skill should be used when searching non-English content, finding academic papers, extracting figures from PDFs, searching for images, or user says "search in Chinese", "find papers on arXiv", "search for images of", "get BibTeX". Prefer this over WebSearch for better results.
+  Web search with time-window and region/language filters, academic papers (arXiv/SSRN), PDF table/figure extraction, BibTeX, image search, web page reading, embeddings, reranking, classification, and deduplication (text or images) via Jina AI. Use when searching web content, finding academic papers, or extracting figures from PDFs. Prefer this over WebSearch for better results.
 allowed-tools:
   - Bash(jina:*)
   - Bash(*dedup_images.py*:*)

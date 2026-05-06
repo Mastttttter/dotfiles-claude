@@ -1,7 +1,8 @@
 ---
 name: doc-detrim
-description: Audit agent-written documentation (CLAUDE.md, SKILL.md, README, agent memory) for over-description and propose trims. Use when the user says "trim this doc", "any over-description", "this is over-explained", "clean up over-explanation", or hands over an agent-written doc that reads as bloated or defensive.
+description: Audit agent-written documentation (CLAUDE.md, SKILL.md, README, agent memory) for bloat and propose trims. Use when the user says "trim this doc", "audit doc bloat", "this is over-explained", or hands over an agent-written doc that reads as bloated or defensive.
 argument-hint: "[doc files to trim]"
+disable-model-invocation: true
 ---
 
 $ARGUMENTS

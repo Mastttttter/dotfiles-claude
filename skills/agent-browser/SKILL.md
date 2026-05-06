@@ -1,10 +1,7 @@
 ---
 name: agent-browser
 description: >
-  Browser automation CLI for AI agents. This skill should be used when needing to interact
-  with a web page programmatically — filling forms, clicking buttons, taking screenshots,
-  testing web apps, reviewing frontend UI/UX aesthetics, or any task requiring browser
-  automation.
+  Inspect or debug web pages in a headless browser — fill forms, click buttons, take screenshots, test web apps, review frontend UI/UX aesthetics. Use for headless browser automation.
 allowed-tools:
   - Bash(npx agent-browser:*)
   - Bash(pnpx agent-browser:*)

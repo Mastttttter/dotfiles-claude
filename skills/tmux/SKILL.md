@@ -1,10 +1,9 @@
 ---
 name: tmux
 description: >
-  Remote control tmux sessions for interactive CLIs (python, gdb, etc.) by sending
-  keystrokes and scraping pane output. This skill should be used when the user says
-  "operate tmux", "split pane", "run in tmux", "interactive debug", "start REPL", or
-  before running interactive CLI commands.
+  Remote-control tmux sessions for interactive CLIs (python, gdb, etc.) — send
+  keystrokes, scrape pane output. Use before running any interactive CLI command,
+  or when the user says "split pane", "run in tmux", "start REPL".
 license: Vibecoded
 ---
 

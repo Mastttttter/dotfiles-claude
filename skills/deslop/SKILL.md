@@ -2,11 +2,11 @@
 name: deslop
 description: >
   Rewrite an AI-generated article to remove AI slop patterns — emoji infestation,
-  marketing hyperbole, forced numbered groupings, table fetish, sanitized
-  honesty, lost specificity, and boilerplate scaffolding. Use when the user says
-  "deslop", "rid the slop", "clean up this AI article", "remove AI slop",
-  "depollute", "make this sound less AI", or hands over text that reads as
-  obvious LLM output and wants a human-voice rewrite.
+  marketing hyperbole, forced numbered groupings, table fetish, sanitized honesty,
+  lost specificity, and boilerplate scaffolding. Restores a human voice.
+  Use when the user says "deslop", "rid the slop", "clean up this AI article",
+  "remove AI slop", "depollute", or "make this sound less AI".
+disable-model-invocation: true
 ---
 
 # Deslop — Strip AI Slop From an Article
