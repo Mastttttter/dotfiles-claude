@@ -16,7 +16,7 @@ Pipeline (parallelize via subagents where volume warrants):
 
 1. DISTILL → ~/.claude/memory/distilled/<slug>.md per project (one .md per cwd). Read each session's JSONL, order events by timestamp, keep only user (string content) and assistant (text blocks) where isSidechain=false. Drop <system-reminder>, <command-*>, <task-notification>, "Cache keep-alive..." ticks, "<<autonomous-loop...>>" sentinels.
 
-2. EXTRACT per .md → bullet nuggets. Each: STANDING-RULE claim + line citation + tag in {convention, costly-correction, trial-and-error, friction-point, user-anger, repeating-workflow, env-facts, remember} → ~/.claude/memory/distilled/extracted/<num>-<slug>.md
+2. EXTRACT per .md → bullet nuggets. Each: STANDING-RULE claim + line citation + tag in {user-convention, user-correction, costly-error, trial-and-error, friction-point, user-anger, repeating-workflow, env-facts, remember} → ~/.claude/memory/distilled/extracted/<num>-<slug>.md
 
 3. CLUSTER across projects → one merged file. H2 themes (8–14); merge near-duplicates; carry `(×N sources)` cross-project recurrence count → ~/.claude/memory/distilled/extracted/_merged.md
 
@@ -24,11 +24,11 @@ Pipeline (parallelize via subagents where volume warrants):
 
 5. PROMOTE → ~/.claude/memory/promote.py merges `_triaged.md` into promoted/pending/rejected.md. For a fresh INIT (no carryover desired), remove the three destination files first. promoted.md: pure claim text under themed H2; pending keeps `[?]` markers; rejected keeps citations and metadata.
 
-KEEP: user conventions against AI defaults, costly or repeated corrections, repeatitive trial and errors, friction point, user confusion or anger, reusable repeatitive workflows, hard env facts (working projects, reusable utilities, available tools, services, API endpoints, crontab, hardware, identity), user asked "remember", cross-project recurrence ≥2.
+KEEP: user preferences or conventions against AI defaults, user corrected AI mistakes that likely violate again, stucking errors or costly corrections, repeatitive trial and errors, repatitive friction point collabrate with user, user feel confused or angry, reusable repeatitive workflows, hard env facts (working projects, reusable utilities, available tools, services, API endpoints, crontab, hardware, identity), user asked "remember" a thing survives long-term, cross-project recurrence ≥2.
 
 DROP: in-flight project state, plan on paper, hypotheses, reverted changes, AI defaults, narrow empirical findings, volatile project-internal mechanics, project file citations, temporary files, claims too narrow to justify always-loaded cost.
 
-Bias FALSE NEGATIVES > false positives — promoted memory pollutes every future Claude session. Target ~50–70 nuggets. Head to BUILD INDEX after promoted.md creation.
+Bias FALSE NEGATIVES > false positives — promoted memory pollutes every future Claude session. Target ~40–70 nuggets per week. Head to BUILD INDEX after promoted.md creation.
 
 ### VALUE MAP
 
@@ -71,7 +71,7 @@ Incremental update of ~/.claude/memory/. Same KEEP/DROP rules and FALSE-NEGATIVE
            cited: <slug>:L<line>      ← 2-space indent continuation, optional
 
   4. AUTO-RESOLVE [?] (default):
-     - For each [?] in `_triaged.md` and `pending.md`, default to `[-]` UNLESS the bullet adds standalone value not already captured in BUILD.md or any memory file.
+     - For each [?] in `_triaged.md` and `pending.md`, default to `[-]` UNLESS the bullet adds standalone value not already captured in existing memory file.
      - If a [?] flagged a contradiction with an existing `promoted.md` entry, edit promoted.md to delete or replace the stale entry FIRST, then resolve the [?].
      - Override: edit the marker before this step or say "stop at [?]".
 
@@ -84,12 +84,13 @@ Incremental update of ~/.claude/memory/. Same KEEP/DROP rules and FALSE-NEGATIVE
 ## CLEAN INSTRUCTION
 
 Audit ~/.claude/memory/promoted.md and prune entries matching any of:
-  1. Completed historical events (e.g. a rename that has already happened, a one-time setup step).
-  2. Legacy protocol/auth details for a path the same file already declares superseded by a current path.
+  1. Completed historical events (e.g. a rename that has already happened, a one-time setup not worth future reuse).
+  2. Legacy details superseded by new entries.
   3. Vague meta-advice with no concrete future trigger.
   4. Version-pinned facts that will rot.
-  5. Empirical results or numbers.
-  6. Direct answer rediscoverable by a quick `rg`/`Read` in a known repo.
+  5. Dead link or missing path citations.
+  6. Empirical results or numbers.
+  7. Direct answer rediscoverable by a quick `rg`/`Read` in a known repo.
 
 For each entry pruned:
   - If a durable kernel survives (methodology, conclusion, sweet-spot rule), keep that kernel and drop the specifics.
@@ -100,6 +101,8 @@ Write the originals (verbatim) into cleaned.md, grouped under their original sec
 ## AUDIT INSTRUCTION
 
 Audit H2 classification in promoted.md. Section titles must be recall-friendly: title alone tells a future Claude which H2 to open.
+
+Ask yourself: Think yourself as a fresh-eye assistant, will you recall the correct memory pages where the relevant truth lies in, based on H2 titles?
 
 Find and fix:
 1. Catch-all sections (Misc, "quality", grab-bags) — redistribute their bullets, or split off a coherent subtheme of ≥3 bullets into its own H2.
@@ -126,3 +129,7 @@ After each distill action, append distill-history.md with local timestamp [YYYY-
 - distill.py for DISTILL
 - promote.py for PROMOTE
 - pages.py for BUILD INDEX
+
+## WEEKLY ROUTINE
+
+Suggest the user to run UPDATE + AUDIT + CLEAN weekly by saying "weekly memory distill".
