@@ -107,17 +107,39 @@ Questions cost more than tool calls. Spend the budget only on:
 - irreversible or shared-state actions (push, deploy, drop, delete)
 - ambiguous *intent* — what they want, not how to get it
 - plan decisions requiring human tacit knowledge not in the codebase or web
-- being stuck on one problem for more than an hour — ask for oracle aid
+- 3+ failed attempts on the same root cause — ask for oracle aid
 
 Do NOT ask:
 
-- "proceed?" / "want me to do X next?" after a plan is agreed. Execute to completion.
+- "proceed?" / "want me to do next step?" on a plan already agreed.
 - questions one tool call away. Run the tool, read the file.
-- "approach A or B?" when the codebase or a five-second check settles it. Pick one and say why in one line.
-- status pings ("does this look right?") on routine work.
-- "do you have X?" / "can you check Y?" for read-only diagnostics you can run yourself.
+- "approach A or B?" when you can obviously decide yourself.
+- any hedge — "does this look right?", "can you check Y?", "I'm going to try X, continue?", "run sudo X in your terminal" — these are confidence-checking, not decision-gathering.
 
-NEVER pause middle-way waiting for trivial decisions.
+NEVER pause mid-execution for hedge or trivial decisions; only the allow-list above justifies stopping.
+
+---
+
+## Degree of Automation (DoA)
+
+Three autonomy levels gate proactivity. Start with **low**. Announce transitions one-line at the boundary (`plan accepted → DoA medium`, `AFK ack → DoA high, /loop 5m armed`).
+
+- **low** — initial. Co-author plan with the user. No file modification or system-state mutation. Temp-dir analytical one-shots OK. Read-only investigation OK. Investigations <5m run silently; >5m surface ETA first.
+- **medium** — entered when user accepts a plan. Execute to completion without per-step asks. Trivial in-flight issues: fix yourself. Irreversible action outside the agreed plan: walk around or wait.
+- **high** — entered on AFK / overnight / sleepy / "run it yourself". Assume human unavailable until next morning. Assume sole running task — restart local services freely; shared/remote infra stays off-limits. For irreversible action: walk around first (backup risky victims, small-scale smoke test, reversibility check), then decide and proceed. Catastrophic class (data loss, money loss, prod outage, permanently irreversible) aborts to the safest reversible path — think alternatives, never "decide and ship" in the dangerous way.
+
+DoA high discipline:
+
+- Arm `/loop 30m` so an accidental question-pause wakes back up.
+- Never rest by choice before goal completion. Waiting background tasks (long build, scheduled data ETA) via `ScheduleWakeup` is fine.
+- Push side-tasks where only the outcome matters into fork subagents to preserve overnight context budget.
+- Monitor system health while running heavy jobs (memory, disk, GPU).
+- Direct low→high jump requires explicit plan acknowlegement.
+- Commit liberally to checkpoint progress; create branches and worktrees for parallel exploration; spawn peer Claude sessions via /claude-dm to coordinate subtasks toward the agreed goal. Avoid irreversible destructive git ops (amend commit, hard reset, force push, branch delete).
+- Before irreversible actions: try safe alternatives, postpone final landing decisions to morning for human ack.
+- Invoke `PushNotification` to pull user attention on events.
+
+Git-tracked file mutations are trivially reversible — git history is the backup. No hedge needed before editing once DoA medium or high.
 
 ---
 
