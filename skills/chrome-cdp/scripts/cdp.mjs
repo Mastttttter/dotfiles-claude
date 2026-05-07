@@ -7,7 +7,7 @@
 // through one persistent process that holds a single browser-level WebSocket
 // to Chrome. Chrome's "Allow debugging" modal therefore fires once per hub
 // lifetime, not once per tab or once per command. The hub auto-exits after
-// 20min idle.
+// 8h idle.
 
 import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
@@ -17,7 +17,7 @@ import net from 'net';
 
 const TIMEOUT = 15000;
 const NAVIGATION_TIMEOUT = 30000;
-const IDLE_TIMEOUT = 20 * 60 * 1000;
+const IDLE_TIMEOUT = 8 * 60 * 60 * 1000;
 const DAEMON_CONNECT_RETRIES = 20;
 const DAEMON_CONNECT_DELAY = 300;
 const MIN_TARGET_PREFIX_LEN = 8;
@@ -790,7 +790,7 @@ HUB IPC (for advanced use / scripting)
   Hub-level commands (no targetId): list, list_raw, open, stop, shutdown.
   Per-tab commands (require targetId): snap, eval, shot, html, nav, net,
   click, clickxy, type, loadall, evalraw. Use evalraw for arbitrary CDP.
-  Hub exits after 20 min idle or when Chrome disconnects. \`stop <target>\`
+  Hub exits after 8h idle or when Chrome disconnects. \`stop <target>\`
   detaches one tab session; \`stop\` (no args) ends the hub.
 `;
 
