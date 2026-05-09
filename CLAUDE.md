@@ -13,6 +13,8 @@ Preferred over defaults:
 - `uv run` not `python3`
 - `pnpm` not `npm`
 
+Specialized tools: `sqlite3`, `gitleaks`, `hyperfine`, `rsync`, `gh`
+
 ---
 
 ## Python Preferences
