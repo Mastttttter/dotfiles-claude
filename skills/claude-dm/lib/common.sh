@@ -20,14 +20,31 @@ audit() {
 # pane_pid -> claude pid. When tmux launches a shell, pane_pid is the shell
 # and claude is its child. When tmux launches claude directly (e.g. `new-session
 # '... claude'`), pane_pid itself is claude.
+#
+# Two-tier identity check, applied to the pid itself then each direct child:
+#   1. comm == "claude"               — fast path, set when execve was given the
+#                                        symlink path (basename "claude")
+#   2. ~/.claude/sessions/<pid>.json  — covers the case where execve was given
+#                                        the resolved versioned path (basename
+#                                        "2.1.X"), which sets comm to the
+#                                        version string and would otherwise
+#                                        hide the pane from `list`.
+_pid_comm() {
+  local f="/proc/$1/comm"
+  [[ -r "$f" ]] && tr -d '\n' < "$f"
+}
+_is_claude_pid() {
+  local pid="$1"
+  [[ "$(_pid_comm "$pid")" == "claude" ]] && return 0
+  [[ -f "$CLAUDE_SESSIONS_DIR/$pid.json" ]]
+}
 pane_to_claude_pid() {
-  local pid="$1" comm
-  comm=$(ps -o comm= -p "$pid" 2>/dev/null | tr -d ' ')
-  if [[ "$comm" == "claude" ]]; then
-    printf '%s\n' "$pid"
-    return 0
-  fi
-  pgrep -P "$pid" -x claude 2>/dev/null | head -n 1
+  local pid="$1" cand
+  _is_claude_pid "$pid" && { printf '%s\n' "$pid"; return 0; }
+  for cand in $(pgrep -P "$pid" 2>/dev/null); do
+    _is_claude_pid "$cand" && { printf '%s\n' "$cand"; return 0; }
+  done
+  return 1
 }
 
 # target -> pane_pid (shell leader, not the claude process itself)
@@ -92,12 +109,12 @@ self_target() {
     '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null
 }
 
-# Walk PPID chain to find this session's claude pid.
+# Walk PPID chain to find this session's claude pid. Same dual check as
+# pane_to_claude_pid so versioned-path execs are recognised.
 self_claude_pid() {
-  local pid="$PPID" comm
+  local pid="$PPID"
   while [[ -n "$pid" && "$pid" -gt 1 ]]; do
-    comm=$(ps -o comm= -p "$pid" 2>/dev/null | tr -d ' ')
-    [[ "$comm" == "claude" ]] && { printf '%s\n' "$pid"; return 0; }
+    _is_claude_pid "$pid" && { printf '%s\n' "$pid"; return 0; }
     pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
   done
   return 1

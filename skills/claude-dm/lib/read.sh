@@ -12,17 +12,19 @@ dm_roster() {
       '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null || true)
   fi
 
+  # No pre-filter on pane_current_command: when execve received the resolved
+  # version path (basename "2.1.X") rather than the "claude" symlink, comm and
+  # therefore #{pane_current_command} hold the version string, not "claude".
+  # pane_to_claude_pid is the authoritative gate.
   tm list-panes -a \
-      -F '#{pane_pid}	#{session_name}:#{window_index}.#{pane_index}	#{pane_current_command}	#{pane_title}' \
-    | awk -F'\t' '$3=="claude"' \
-    | while IFS=$'\t' read -r pane_pid addr _cmd title; do
+      -F '#{pane_pid}	#{session_name}:#{window_index}.#{pane_index}	#{pane_title}' \
+    | while IFS=$'\t' read -r pane_pid addr title; do
         local state cpid sid marker=""
+        cpid=$(pane_to_claude_pid "$pane_pid") || continue
         case "$title" in
           '✳'*) state='idle'  ;;
           *)    state='busy'  ;;
         esac
-        cpid=$(pane_to_claude_pid "$pane_pid")
-        [[ -n "$cpid" ]] || continue
         sid=$(pid_to_sid "$cpid" || true)
         [[ -n "$self_addr" && "$addr" == "$self_addr" ]] && marker="*"
         printf '%s%s\t%s\t%s\t%s\t%s\n' "$addr" "$marker" "$cpid" "$state" "$sid" "$title"

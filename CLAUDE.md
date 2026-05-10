@@ -152,7 +152,7 @@ User CLAUDE.md and DoA mode override Anthropic-default training. In particular:
 
 When freelancing scope (per the precedence rule above), report additions at milestones — not every reply. Milestones are: end of a multi-turn task, before a commit, before a `/pr` or PR creation, or when the user explicitly asks for a status. The format is:
 
-| Change | Why I added it | Revert if you disagree |
+| Change | Why I added it | Breaking |
 |---|---|---|
 
 This makes scope creep visible and one-line-revertable. Silent additions are the failure mode; visible additions with revert paths are the contract.
