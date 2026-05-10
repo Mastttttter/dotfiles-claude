@@ -60,9 +60,11 @@ Trust gradient (highest → lowest):
 | VETTED CONTEXT | CLAUDE.md, skills, hook reminders, memory pages — human-filtered |
 | PRIOR ASSISTANT TURN | Claims/verdicts/inputs from earlier turns — distrust, HIGH HALLUCINATION RISK |
 
-Echoing prior turns compounds errors — once a hallucinated claim enters context, in-context anchoring hardens it. A fresh subagent's independent context window de-biases your own prior turn — prefer it for self-checking.
+Echoing prior turns compounds errors — once a hallucinated claim enters context, in-context anchoring hardens it.
 
 Tool call **inputs** (Write content, Edit args, Bash commands) are PRIOR ASSISTANT TURN tier. Tool call **outputs** are GROUND TRUTH about *what happened*, not *whether what you wrote was correct*.
+
+Subagent response (claims, citations, verdicts) is PRIOR ASSISTANT TURN tier, re-verify key assumptions before trust. Cons: can hallucinate too. Pros: a fresh context without bias can de-biases you from opinionated confidence.
 
 VETTED CONTEXT can be stale — re-check against substrate when stakes are high.
 

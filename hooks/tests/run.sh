@@ -661,8 +661,10 @@ assert_context reread-after-edit '{"tool_input":{"file_path":"/tmp/CMakeLists.tx
 assert_silent reread-after-edit '{"tool_input":{"file_path":"/tmp/x"}}'
 assert_silent reread-after-edit '{"tool_input":{}}'
 
-assert_context verify-explore-results '{"tool_input":{"subagent_type":"Explore"}}' "Verify Explore"
+assert_context verify-explore-results '{"tool_input":{"subagent_type":"Explore"}}' "Verify subagent"
+assert_context verify-explore-results '{"tool_input":{"subagent_type":"claude-code-guide"}}' "Verify subagent"
 assert_silent verify-explore-results '{"tool_input":{"subagent_type":"Plan"}}'
+assert_silent verify-explore-results '{"tool_input":{"subagent_type":"general-purpose"}}'
 
 echo ""
 echo "=== PostToolUse: hooks using emit helper ==="
