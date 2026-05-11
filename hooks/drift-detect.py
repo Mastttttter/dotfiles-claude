@@ -183,7 +183,7 @@ def run():
             f"Drift signal: 5-turn windowed tokens-per-grounding-event sustained above "
             f"p90 ({P90}) for {SUSTAINED}+ turns (current: {most_recent:.0f}). "
             f"You may be generating output (text, code, edits) without enough verification. "
-            f"Refresh grounding (current docs, real-world usage, existing substrate, fresh "
+            f"Refresh grounding (current docs, real-world tool call, existing substrate, fresh "
             f"subagent audit) before continuing. "
             f"See Self-critique Protocol and Output Style — Epistemic Markers.\n"
         )
