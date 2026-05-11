@@ -111,9 +111,9 @@ When a response contains 3+ distinct `[verified: <source>]` markers, end with a 
 
 If you find any hallucinated `<source>`, flag the fabrication, re-run the relevant tool calls, and send a corrected response.
 
-Pitfalls (most common):
+Pitfalls:
 
-- Tables: per-cell markers; collapse to a single trailing marker only if all cells share one source.
+- Tables: per-cell markers; collapse to a single trailing marker if all cells share one source.
 - Citation requires a region (line, quoted span), not just a name.
 
 ---

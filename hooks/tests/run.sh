@@ -606,6 +606,12 @@ echo "$out" | jq -e '.hookSpecificOutput.permissionDecision == "allow" and .hook
   && echo "OK:   explore-model-sonnet injects sonnet for opus parent" \
   || { echo "FAIL: explore-model-sonnet opus-parent inject: $out"; fail=1; }
 
+# 1b. Opus parent + no model + claude-code-guide subagent → inject sonnet too
+out=$(printf '%s' "$(jq -nc --arg t "$em_opus" '{transcript_path:$t,tool_input:{subagent_type:"claude-code-guide",prompt:"x"}}')" | bash ~/.claude/hooks/explore-model-sonnet.sh)
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision == "allow" and .hookSpecificOutput.updatedInput.model == "sonnet"' > "$test_out" \
+  && echo "OK:   explore-model-sonnet injects sonnet for claude-code-guide opus parent" \
+  || { echo "FAIL: explore-model-sonnet claude-code-guide opus-parent inject: $out"; fail=1; }
+
 # 2. Haiku parent + no model → silent (don't downgrade haiku→sonnet)
 out=$(printf '%s' "$(jq -nc --arg t "$em_haiku" '{transcript_path:$t,tool_input:{subagent_type:"Explore",prompt:"x"}}')" | bash ~/.claude/hooks/explore-model-sonnet.sh)
 [ -z "$out" ] \
@@ -960,6 +966,72 @@ rm -f "$hccg_cache" \
       "/tmp/claude-hint-agent-claude-code-guide/$hccg_sid3" \
       "/tmp/claude-hint-agent-claude-code-guide/$hccg_sid7" \
       "/tmp/claude-hint-agent-claude-code-guide/$hccg_sid8"
+
+
+# hint-skill-jina-ai: nudge agent to load the jina-ai skill before calling
+# WebSearch. Once-per-session cache (signature: session_id).
+hsja_sid="hsja-$$"
+hsja_cache="/tmp/claude-skill-hint-jina-ai/$hsja_sid"
+rm -f "$hsja_cache"
+
+# 1. WebSearch first fire → emit hint
+out=$(printf '%s' "$(jq -nc --arg s "$hsja_sid" '{session_id:$s,tool_name:"WebSearch",tool_input:{query:"foo"}}')" \
+       | bash ~/.claude/hooks/hint-skill-jina-ai.sh)
+echo "$out" | jq -e '(.hookSpecificOutput.permissionDecision | not) and (.hookSpecificOutput.additionalContext | contains("/jina-ai"))' > "$test_out" \
+  && echo "OK:   hint-skill-jina-ai fires on first WebSearch call" \
+  || { echo "FAIL: hint-skill-jina-ai first WebSearch: $out"; fail=1; }
+
+# 2. WebSearch second fire same session → cache hit, silent
+out=$(printf '%s' "$(jq -nc --arg s "$hsja_sid" '{session_id:$s,tool_name:"WebSearch",tool_input:{query:"bar"}}')" \
+       | bash ~/.claude/hooks/hint-skill-jina-ai.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-jina-ai silent on repeat in same session" \
+  || { echo "FAIL: hint-skill-jina-ai should be silent on repeat: $out"; fail=1; }
+
+# 3. Different session → hint re-fires (cache is per-session)
+hsja_sid2="hsja2-$$"
+hsja_cache2="/tmp/claude-skill-hint-jina-ai/$hsja_sid2"
+rm -f "$hsja_cache2"
+out=$(printf '%s' "$(jq -nc --arg s "$hsja_sid2" '{session_id:$s,tool_name:"WebSearch",tool_input:{query:"baz"}}')" \
+       | bash ~/.claude/hooks/hint-skill-jina-ai.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("/jina-ai")' > "$test_out" \
+  && echo "OK:   hint-skill-jina-ai re-fires for new session_id" \
+  || { echo "FAIL: hint-skill-jina-ai new session: $out"; fail=1; }
+
+rm -f "$hsja_cache" "$hsja_cache2"
+
+
+# hint-skill-read-url: nudge agent to load the read-url skill before calling
+# WebFetch. Once-per-session cache (signature: session_id).
+hsru_sid="hsru-$$"
+hsru_cache="/tmp/claude-skill-hint-read-url/$hsru_sid"
+rm -f "$hsru_cache"
+
+# 1. WebFetch first fire → emit hint
+out=$(printf '%s' "$(jq -nc --arg s "$hsru_sid" '{session_id:$s,tool_name:"WebFetch",tool_input:{url:"https://example.com"}}')" \
+       | bash ~/.claude/hooks/hint-skill-read-url.sh)
+echo "$out" | jq -e '(.hookSpecificOutput.permissionDecision | not) and (.hookSpecificOutput.additionalContext | contains("/read-url"))' > "$test_out" \
+  && echo "OK:   hint-skill-read-url fires on first WebFetch call" \
+  || { echo "FAIL: hint-skill-read-url first WebFetch: $out"; fail=1; }
+
+# 2. WebFetch second fire same session → cache hit, silent
+out=$(printf '%s' "$(jq -nc --arg s "$hsru_sid" '{session_id:$s,tool_name:"WebFetch",tool_input:{url:"https://example.org"}}')" \
+       | bash ~/.claude/hooks/hint-skill-read-url.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-read-url silent on repeat in same session" \
+  || { echo "FAIL: hint-skill-read-url should be silent on repeat: $out"; fail=1; }
+
+# 3. Different session → hint re-fires (cache is per-session)
+hsru_sid2="hsru2-$$"
+hsru_cache2="/tmp/claude-skill-hint-read-url/$hsru_sid2"
+rm -f "$hsru_cache2"
+out=$(printf '%s' "$(jq -nc --arg s "$hsru_sid2" '{session_id:$s,tool_name:"WebFetch",tool_input:{url:"https://example.net"}}')" \
+       | bash ~/.claude/hooks/hint-skill-read-url.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("/read-url")' > "$test_out" \
+  && echo "OK:   hint-skill-read-url re-fires for new session_id" \
+  || { echo "FAIL: hint-skill-read-url new session: $out"; fail=1; }
+
+rm -f "$hsru_cache" "$hsru_cache2"
 
 echo ""
 rm -f "$test_out"

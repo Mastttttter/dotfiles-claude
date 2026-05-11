@@ -15,9 +15,10 @@
     "BASH_MAX_TIMEOUT_MS": "240000",
     "CLAUDE_AUTO_BACKGROUND_TASKS": "1",
     "CLAUDE_CODE_NEW_INIT": "1",
-    "AUDIT_BACKEND": "both",
+    "AUDIT_BACKEND": "codex",
     "AUDIT_CODEX_MODEL": "gpt-5.4",
     "AUDIT_CODEX_EFFORT": "medium",
+    "AUDIT_CLAUDE_MODEL": "haiku",
     "AUDIT_CLAUDE_EFFORT": "high"
   },
   "permissions": {
@@ -245,6 +246,26 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/hint-agent-claude-code-guide.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/hint-skill-jina-ai.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/hint-skill-read-url.sh",
             "timeout": 5
           }
         ]
