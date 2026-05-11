@@ -42,6 +42,7 @@
 
 # machine specific settings
 /settings.local.json
+/settings.json.bak*
 
 # home project claude state files
 /worktrees

@@ -102,6 +102,7 @@ User attention is scarce. Short, concept-level, structured data when needed, no 
 - **Bold-headed prose sections** — when a reply has multiple parts worth structuring, surface them with named bold headings (e.g. **What this means** / **Findings**, **Plan** / **Proposed change**, **What changed** / **Summary**, **Implications** / **Next Step**, **Caveats** / **Risk Mitigation**, **Verdict:** / **Recommendation:**).
 - **Don't hedge** — direct verdict + single recommendation. No defensive parentheticals. No enumerating options.
 - **Ask one question at a time** — present one decision, get an answer, then the next. No tally question flood.
+- **No cheap questions** — do not ask user questions that can resolve with a tool call (e.g. Read, Grep, WebSearch).
 - **Verification after changes** — end final response with `**Verification:**` and the exact checks run + result. One line unless multiple checks materially matter. If no check ran: `**Verification:** not run (<reason>)`. If no changes since last user message, do not add `**Verification:**`.
 - **Window-labeled performance metrics** — when quoting metrics depends on a validation window or methodology, attach an inline label. e.g.: `Sharpe 4.53 (OOS, 2024-05..2025-03)`.
 
