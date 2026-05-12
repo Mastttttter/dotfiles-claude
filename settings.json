@@ -439,7 +439,8 @@
     "code-review@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": true,
     "lua-lsp@claude-plugins-official": true,
-    "caveman@caveman": true
+    "caveman@caveman": false,
+    "superpowers@superpowers-marketplace": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -458,6 +459,12 @@
       "source": {
         "source": "github",
         "repo": "juliusbrussee/caveman"
+      }
+    },
+    "superpowers-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "obra/superpowers-marketplace"
       }
     }
   },
