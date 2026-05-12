@@ -3,7 +3,7 @@
 #   ZAI_API_KEY        → glm     (Zhipu BigModel)
 #   DEEPSEEK_API_KEY   → deepseek
 #   OPENROUTER_API_KEY → openrouter
-#   OFOX_API_KEY       → ofox    (OfoxAI aggregator, defaults to DeepSeek V4)
+#   OFOX_API_KEY       → ofox    (OfoxAI aggregator, Gemini 3.1 pro)
 #   LLAMA_API_KEY      → qwen
 #   (none)             → gpt     (ChatGPT OAuth — needs the codex-to-claude
 #                                 proxy running locally; see
