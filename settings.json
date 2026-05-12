@@ -20,7 +20,6 @@
     "AUDIT_CODEX_EFFORT": "medium",
     "AUDIT_CLAUDE_MODEL": "haiku",
     "AUDIT_CLAUDE_EFFORT": "high",
-    "CLAUDE_MEM_MODE": "code",
     "CAVEMAN_DEFAULT_MODE": "ultra"
   },
   "permissions": {
@@ -482,8 +481,8 @@
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,
   "tui": "fullscreen",
-  "autoMemoryEnabled": true,
-  "autoDreamEnabled": true,
+  "autoMemoryEnabled": false,
+  "autoDreamEnabled": false,
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
   "theme": "auto",

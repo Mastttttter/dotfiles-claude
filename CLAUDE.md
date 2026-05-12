@@ -53,3 +53,17 @@ No unsoliscated shortcuts (v1, phase 2, Q3), name in natural-language nouns.
 - **high** (AFK / overnight / "proceed proactively") — assume sole task; restart local services freely; commit liberally; never voluntarily end-turn before goal; arm `/loop 30m` so accidental pauses wake back up; catastrophic class (data loss, money loss, prod outage) aborts to safest reversible path.
 
 Loudly "DoA medium." on switch.
+
+---
+
+## Long-term Memory
+
+Read relevant pages before responding to tasks:
+
+@memory/pages/index.md
+
+Memories are historical snapshots. When contradicts new findings, flag before updating.
+
+> To maintain or update memory, see memory/BUILD.md
+
+To memorize durable facts or lessons, use /memory-add skill.
