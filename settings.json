@@ -442,8 +442,7 @@
     "typescript-lsp@claude-plugins-official": true,
     "lua-lsp@claude-plugins-official": true,
     "caveman@caveman": true,
-    "superpowers@superpowers-marketplace": true,
-    "claude-mem@thedotmack": true
+    "superpowers@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -483,8 +482,8 @@
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,
   "tui": "fullscreen",
-  "autoMemoryEnabled": false,
-  "autoDreamEnabled": false,
+  "autoMemoryEnabled": true,
+  "autoDreamEnabled": true,
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
   "theme": "auto",
