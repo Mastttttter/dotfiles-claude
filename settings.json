@@ -430,9 +430,9 @@
     "refreshInterval": 5
   },
   "enabledPlugins": {
-    "pyright-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": false,
     "context7@claude-plugins-official": false,
-    "clangd-lsp@claude-plugins-official": true,
+    "clangd-lsp@claude-plugins-official": false,
     "claude-hud@claude-hud": false,
     "code-simplifier@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": false,
@@ -440,9 +440,9 @@
     "plugin-dev@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": true,
-    "lua-lsp@claude-plugins-official": true,
+    "lua-lsp@claude-plugins-official": false,
     "caveman@caveman": true,
-    "superpowers@claude-plugins-official": true
+    "superpowers@claude-plugins-official": false
   },
   "extraKnownMarketplaces": {
     "claude-hud": {

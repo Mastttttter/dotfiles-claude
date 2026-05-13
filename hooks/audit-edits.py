@@ -517,6 +517,9 @@ def _spawn_audit_claude(
         "CLAUDE_CODE_DISABLE_POLICY_SKILLS": "1",
         "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
         "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+        "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
+        "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     }
     model = os.environ.get("AUDIT_CLAUDE_MODEL", "sonnet")
     effort = os.environ.get("AUDIT_CLAUDE_EFFORT")

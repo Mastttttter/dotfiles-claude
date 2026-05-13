@@ -30,17 +30,6 @@ function haiku
     claude --model haiku $argv
 end
 
-function hai
-    set -lx CLAUDE_CODE_EXTRA_BODY '{"temperature":0}'
-    set -lx CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT 1
-    set -lx CLAUDE_CODE_DISABLE_POLICY_SKILLS 1
-    set -lx CLAUDE_CODE_DISABLE_AUTO_MEMORY 1
-    set -lx ENABLE_CLAUDEAI_MCP_SERVERS false
-    set -lx CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY 1
-    set -lx AUDIT_BACKEND none
-    claude --model haiku --permission-mode default --thinking disabled $argv
-end
-
 function commit
     if command -sq gitleaks
         if not gitleaks detect --no-banner

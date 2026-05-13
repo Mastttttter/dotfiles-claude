@@ -31,17 +31,6 @@ haiku() {
     claude --model haiku "$@"
 }
 
-hai() {
-    CLAUDE_CODE_EXTRA_BODY='{"temperature":0}' \
-    CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT=1 \
-    CLAUDE_CODE_DISABLE_POLICY_SKILLS=1 \
-    CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 \
-    ENABLE_CLAUDEAI_MCP_SERVERS=false \
-    CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1 \
-    AUDIT_BACKEND=none \
-    claude --model haiku --permission-mode default --thinking disabled "$@"
-}
-
 commit() {
     if command -v gitleaks >/dev/null 2>&1; then
         if ! gitleaks detect --no-banner; then
