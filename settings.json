@@ -439,7 +439,7 @@
     "codex@openai-codex": true,
     "plugin-dev@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
-    "typescript-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": false,
     "lua-lsp@claude-plugins-official": false,
     "caveman@caveman": true,
     "superpowers@claude-plugins-official": false
