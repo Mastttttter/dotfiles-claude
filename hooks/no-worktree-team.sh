@@ -6,6 +6,6 @@ input=$(cat)
 has_worktree=$(echo "$input" | jq -r 'select(.tool_input.isolation == "worktree" and .tool_input.team_name != null) // empty')
 if [ -n "$has_worktree" ]; then
   source "$(dirname "$0")/lib/emit.sh"
-  emit_pre_tool_deny "isolation: worktree silently fails with team_name (#33045). Pre-create worktrees under .claude/worktrees/ and tell teammates to EnterWorktree(path:)."
+  emit_pre_tool_deny "isolation: worktree silently fails with team_name (#33045). Either use no team_name for regular subagents, or pre-create worktrees under .claude/worktrees/ and tell teammates to EnterWorktree(path:)."
 fi
 exit 0
