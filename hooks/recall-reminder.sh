@@ -6,7 +6,7 @@
 # 2.1.141 JS bundle: 10 turns since last write + 10 turns since last
 # reminder).
 #
-# State: /tmp/claude-recall-reminder/<session_id> — single integer
+# State: /tmp/claude-${UID}-state/recall-reminder/<session_id> — single integer
 # counter, reset to 0 after each fire. The companion hook
 # recall-reminder-reset.sh (PostToolUse on Read|Skill) also zeros the
 # counter when the agent Reads a memory page (including pitfalls.md) or
@@ -17,8 +17,8 @@
 set -euo pipefail
 
 RECALL_INTERVAL="${RECALL_REMINDER_INTERVAL:-9}"
-STATE_DIR="/tmp/claude-recall-reminder"
-mkdir -p "$STATE_DIR"
+STATE_DIR="/tmp/claude-${UID}-state/recall-reminder"
+mkdir -p -m 700 "$STATE_DIR"
 
 PAYLOAD=""
 if ! [ -t 0 ]; then

@@ -16,7 +16,7 @@ source "$(dirname "$0")/lib/emit.sh"
 source "$(dirname "$0")/lib/session_lock.sh"
 
 THRESHOLD_KB=50
-CACHE_DIR=/tmp/claude-hint-fork-bloat
+CACHE_DIR=/tmp/claude-${UID}-state/hint-fork-bloat
 
 input=$(cat)
 SID=$(jq -r '.session_id // empty' <<< "$input")
@@ -28,7 +28,7 @@ SID=$(jq -r '.session_id // empty' <<< "$input")
 # them; main agent gets the hint via its own counter.
 case "$SID" in agent-*) exit 0 ;; esac
 
-mkdir -p "$CACHE_DIR"
+mkdir -p -m 700 "$CACHE_DIR"
 COUNTER="$CACHE_DIR/$SID.counter"
 FIRED="$CACHE_DIR/$SID.fired"
 

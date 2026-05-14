@@ -9,10 +9,10 @@ skill=$(jq -r '.tool_input.skill // ""' <<< "$input")
 case "$skill" in *pueue*) ;; *) exit 0 ;; esac
 
 SID=$(jq -r '.session_id // "unknown"' <<< "$input")
-SKILL_CACHE_DIR=/tmp/claude-pueue-skill-loaded
-mkdir -p "$SKILL_CACHE_DIR"
+SKILL_CACHE_DIR=/tmp/claude-${UID}-state/pueue-skill-loaded
+mkdir -p -m 700 "$SKILL_CACHE_DIR"
 
-COMPACT_GEN="/tmp/claude-compact-events/$SID.gen"
+COMPACT_GEN="/tmp/claude-${UID}-state/compact-events/$SID.gen"
 if [ -f "$COMPACT_GEN" ]; then
     cp "$COMPACT_GEN" "$SKILL_CACHE_DIR/$SID.gen-seen"
 fi

@@ -29,9 +29,9 @@ fi
 
 # Skip if identical to last emission for this session — most turns repeat the
 # same status, so re-injecting it costs uncached input tokens for no signal.
-CACHE_DIR=/tmp/claude-git-status
+CACHE_DIR=/tmp/claude-${UID}-state/git-status
 CACHE_FILE="${CACHE_DIR}/${SID}"
-mkdir -p "$CACHE_DIR"
+mkdir -p -m 700 "$CACHE_DIR"
 if [ -f "$CACHE_FILE" ] && [ "$(cat "$CACHE_FILE")" = "$CTX" ]; then
   exit 0
 fi

@@ -10,7 +10,7 @@
 # Silent: no stdout, no permissionDecision, just touches the state file.
 set -euo pipefail
 
-STATE_DIR="/tmp/claude-recall-reminder"
+STATE_DIR="/tmp/claude-${UID}-state/recall-reminder"
 
 PAYLOAD=""
 if ! [ -t 0 ]; then
@@ -38,6 +38,6 @@ case "$TOOL" in
 esac
 
 if [ "$RESET" = "1" ]; then
-  mkdir -p "$STATE_DIR"
+  mkdir -p -m 700 "$STATE_DIR"
   echo 0 > "$STATE_DIR/$SID"
 fi

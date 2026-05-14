@@ -17,12 +17,12 @@ fi
 SID=$(jq -r '.session_id // "unknown"' <<< "$input")
 case "$SID" in agent-*) exit 0 ;; esac
 
-SKILL_CACHE_DIR=/tmp/claude-pueue-skill-loaded
-HINT_CACHE_DIR=/tmp/claude-pueue-skill-hint
+SKILL_CACHE_DIR=/tmp/claude-${UID}-state/pueue-skill-loaded
+HINT_CACHE_DIR=/tmp/claude-${UID}-state/pueue-skill-hint
 SKILL_CACHE="$SKILL_CACHE_DIR/$SID"
 HINT_CACHE="$HINT_CACHE_DIR/$SID"
 
-mkdir -p "$SKILL_CACHE_DIR" "$HINT_CACHE_DIR"
+mkdir -p -m 700 "$SKILL_CACHE_DIR" "$HINT_CACHE_DIR"
 reset_on_compact "$SID" "$SKILL_CACHE_DIR" "$SKILL_CACHE"
 reset_on_compact "$SID" "$HINT_CACHE_DIR" "$HINT_CACHE"
 

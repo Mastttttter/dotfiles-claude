@@ -7,7 +7,7 @@
 #
 # How the signal works:
 #   compact-bump.sh (PostCompact) increments a shared per-session generation
-#   counter at /tmp/claude-compact-events/<session_id>.gen. Each consuming
+#   counter at /tmp/claude-${UID}-state/compact-events/<session_id>.gen. Each consuming
 #   hook stores its own last-seen generation at <cache_dir>/<sid>.gen-seen
 #   and compares: if the shared gen has grown, compaction happened since the
 #   last reset and the cache files for this hook should be cleared.
@@ -35,7 +35,7 @@ reset_on_compact() {
     local cache_dir="$2"
     shift 2
     local gen_seen="$cache_dir/$sid.gen-seen"
-    local compact_gen_file="/tmp/claude-compact-events/$sid.gen"
+    local compact_gen_file="/tmp/claude-${UID}-state/compact-events/$sid.gen"
     local current_gen=0 prev_gen=0
     if [ -f "$compact_gen_file" ]; then
         current_gen=$(cat "$compact_gen_file")
@@ -47,7 +47,7 @@ reset_on_compact() {
     fi
     if [ "$current_gen" -gt "$prev_gen" ]; then
         rm -f "$@"
-        mkdir -p "$cache_dir"
+        mkdir -p -m 700 "$cache_dir"
         echo "$current_gen" > "$gen_seen"
     fi
 }

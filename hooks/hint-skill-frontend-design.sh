@@ -26,9 +26,9 @@ SID=$(jq -r '.session_id // "unknown"' <<< "$input")
 # short-lived utilities where the skill load isn't worth the context cost.
 case "$SID" in agent-*) exit 0 ;; esac
 
-CACHE_DIR=/tmp/claude-skill-hint-frontend-design
+CACHE_DIR=/tmp/claude-${UID}-state/skill-hint-frontend-design
 CACHE="$CACHE_DIR/$SID"
-mkdir -p "$CACHE_DIR"
+mkdir -p -m 700 "$CACHE_DIR"
 reset_on_compact "$SID" "$CACHE_DIR" "$CACHE"
 [ -f "$CACHE" ] && exit 0
 touch "$CACHE"
