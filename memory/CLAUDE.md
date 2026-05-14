@@ -21,3 +21,9 @@ When user instruction against pitfalls, warn the user for confirm.
 To maintain or update memory, see BUILD.md
 
 When user ask you to "remember" facts or lessons, mistakes or corrections, use /memory-add skill. No edit memory pages directly.
+
+## Recent Memory
+
+Staging memory based on recent activities:
+
+@staging.md

@@ -8,6 +8,7 @@ Recipes for building and maintaining the long-term memory system.
 - `pages/{index.md,<slug>.md}` — runtime memory, exploded from promoted.md by pages.py. Loaded into sessions via @-include in CLAUDE.md.
 - `staging.md` — ad-hoc inbox written by the `/memory-add` skill. Drained into the next weekly UPDATE round (step 3) as `[?]` bullets, then truncated in step 6.
 - `pending.md`, `cleaned.md`, `rejected.md`, `distilled/*`, `distill-history.md` — pipeline artifacts. Consulted only during the build pipeline.
+- `pitfalls.md` — routing table for fast recall on pitfall triggers, extracted from promoted.py.
 
 ## INIT INSTRUCTION
 
@@ -17,7 +18,7 @@ Pipeline (parallelize via subagents where volume warrants):
 
 1. DISTILL → ~/.claude/memory/distilled/<slug>.md per project (one .md per cwd). Read each session's JSONL, order events by timestamp, keep only user (string content) and assistant (text blocks) where isSidechain=false. Drop <system-reminder>, <command-*>, <task-notification>, "Cache keep-alive..." ticks, "<<autonomous-loop...>>" sentinels, user messages starting with "Stop hook feedback:", and assistant text starting with "API Error".
 
-2. EXTRACT per .md → bullet nuggets. Each: STANDING-RULE claim + line citation + tag in {user-convention, user-correction, costly-error, trial-and-error, foot-gun, friction-point, user-anger, repeating-workflow, env-facts, remember} → ~/.claude/memory/distilled/extracted/<num>-<slug>.md
+2. EXTRACT per .md → bullet nuggets. Each: STANDING-RULE claim + line citation + tag in {user-convention, user-correction, costly-error, trial-and-error, foot-gun, friction-point, user-anger, repeating-workflow, env-facts, project-knowledge, project-lesson, remember} → ~/.claude/memory/distilled/extracted/<num>-<slug>.md
 
 3. CLUSTER across projects → one merged file. H2 themes (8–14); merge near-duplicates; carry `(×N sources)` cross-project recurrence count → ~/.claude/memory/distilled/extracted/_merged.md
 
@@ -25,7 +26,7 @@ Pipeline (parallelize via subagents where volume warrants):
 
 5. PROMOTE → ~/.claude/memory/promote.py merges `_triaged.md` into promoted/pending/rejected.md. For a fresh INIT (no carryover desired), remove the three destination files first. promoted.md: pure claim text under themed H2; pending keeps `[?]` markers; rejected keeps citations and metadata.
 
-KEEP: user feedback or conventions against AI defaults, user corrected AI mistakes that likely violate again, stucking errors or costly corrections, repeatitive trial and errors, common pitfalls, repatitive friction point collabrate with user, user feel confused or angry, reusable repeatitive workflows, hard env facts (working projects, reusable utilities, available tools, services, API endpoints, crontab, hardware, identity), user asked "remember" a thing survives long-term, cross-project recurrence ≥2.
+KEEP: user feedback or conventions against AI defaults, user corrected AI mistakes that likely violate again, stucking errors or costly corrections, repeatitive trial and errors, common pitfalls, repatitive friction point collabrate with user, user feel confused or angry, reusable repeatitive workflows, hard env facts (working projects, reusable utilities, available tools, services, API endpoints, crontab, hardware, identity), durable project knowledges, lessons while building projects, user asked "remember" a thing survives long-term, cross-project recurrence ≥2.
 
 DROP: in-flight project state, plan on paper, hypotheses, reverted changes, AI defaults, narrow empirical findings, context easily obtained from Read/rg/Explore, volatile project-internal mechanics, project file citations, temporary files, opinionated speculations, claims too narrow to justify always-loaded cost.
 
