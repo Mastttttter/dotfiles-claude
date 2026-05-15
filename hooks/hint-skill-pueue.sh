@@ -30,4 +30,4 @@ reset_on_compact "$SID" "$HINT_CACHE_DIR" "$HINT_CACHE"
 [ -f "$HINT_CACHE" ] && exit 0
 
 touch "$HINT_CACHE"
-emit_pre_tool_deny "Load /pueue skill first — invoke Skill tool with skill='pueue' to get the standardised workflow and guardrails before running pueue commands. Ignore this hint if false positive trigger."
+emit_pre_tool_deny "Load /pueue skill first — invoke Skill tool with skill='pueue' to get the standardised workflow and guardrails before running pueue commands. Ignore this hint if false positive trigger. (One-shot hint — will not fire again this session.)"

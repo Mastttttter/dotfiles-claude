@@ -393,6 +393,7 @@ assert_silent no-pip-npm '{"tool_input":{"command":"sudo pnpm install"}}'
 
 assert_deny no-worktree-team '{"tool_input":{"isolation":"worktree","team_name":"foo"}}' "worktree silently fails"
 assert_silent no-worktree-team '{"tool_input":{"isolation":"worktree"}}'
+assert_silent no-worktree-team '{"tool_input":{"isolation":"worktree","team_name":""}}'
 
 assert_deny no-cat-write "$(jq -n --arg c "cat << EOF ${REDIR} /tmp/x
 hi
