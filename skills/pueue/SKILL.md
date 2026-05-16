@@ -148,6 +148,7 @@ writing status matchers, treat terminal states as `Success|Failed|Killed`.
 
 ## Skill Files
 !`${CLAUDE_SKILL_DIR}/scripts/ensure_daemon.sh >/dev/null 2>&1 || true`
+- `scripts/ensure_daemon.sh` — start pueue daemon under user systemd with memory cap
 - `scripts/run_in_pueue.sh` — wraps pueue add with auto daemon start, per-project grouping, and follow
 - `scripts/list_pueue_tasks.sh` — list existing pueue tasks and their status
 - `references/pueue.md` — comprehensive pueue CLI usage documentation
