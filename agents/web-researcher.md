@@ -1,6 +1,6 @@
 ---
-name: "web-researcher"
-description: "Use this agent when the user needs deep investigation on a topic, technology, library, API, market data source, academic papers (arXiv/SSRN), or any subject requiring web research. This agent searches broadly, cross-references multiple sources, and produces a comprehensive report. It is read-only and will never edit files or run non-search commands.\\n\\nExamples:\\n\\n- user: \"Find out what changed in the new version of DuckDB's Python API.\"\\n  assistant: \"Let me use the web-researcher agent to investigate DuckDB's recent Python API changes.\"\\n  (Uses Agent tool to launch web-researcher)\\n\\n- user: \"Research recent papers on sparse attention mechanisms on arXiv.\"\\n  assistant: \"I'll launch the web-researcher agent to search academic sources for sparse attention research.\"\\n  (Uses Agent tool to launch web-researcher)"
+name: web-researcher
+description: Use this agent when the user needs deep investigation on a topic, technology, library, API, market data source, academic papers (arXiv/SSRN), or any subject requiring web research.
 model: sonnet
 color: blue
 tools:

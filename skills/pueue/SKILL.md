@@ -1,10 +1,7 @@
 ---
 name: pueue
 description: >
-  Guardrails and mandatory workflow for running long-running tasks via pueue.
-  This skill MUST be used before using pueue to run any long-running task (>2 min),
-  computation-intensive task, or background task — or when the user says
-  "use pueue" or "run in background". This is a process gate, not a reference doc.
+  Run long-running tasks in pueue. This skill should be used before run any long-running task (>2 min), computation-intensive task, or background task — or when the user says "use pueue" or "run in background". This skill defines guardrails and mandatory workflow, not just "how to use pueue".
 allowed-tools:
   - Bash(pueue:*)
   - Bash(*run_in_pueue*:*)
@@ -150,7 +147,8 @@ writing status matchers, treat terminal states as `Success|Failed|Killed`.
 `pueue clean` (or automatic cleanup) permanently removes logs of completed tasks. If you need to verify results later, check output files or save logs before cleaning.
 
 ## Skill Files
-
+!`${CLAUDE_SKILL_DIR}/scripts/ensure_daemon.sh >/dev/null 2>&1 || true`
+- `scripts/ensure_daemon.sh` — start pueue daemon under user systemd with memory cap
 - `scripts/run_in_pueue.sh` — wraps pueue add with auto daemon start, per-project grouping, and follow
 - `scripts/list_pueue_tasks.sh` — list existing pueue tasks and their status
 - `references/pueue.md` — comprehensive pueue CLI usage documentation

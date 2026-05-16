@@ -15,10 +15,13 @@
     "BASH_MAX_TIMEOUT_MS": "240000",
     "CLAUDE_AUTO_BACKGROUND_TASKS": "1",
     "CLAUDE_CODE_NEW_INIT": "1",
-    "AUDIT_BACKEND": "both",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
+    "AUDIT_BACKEND": "codex",
     "AUDIT_CODEX_MODEL": "gpt-5.4",
     "AUDIT_CODEX_EFFORT": "medium",
-    "AUDIT_CLAUDE_EFFORT": "high"
+    "AUDIT_CLAUDE_MODEL": "haiku",
+    "AUDIT_CLAUDE_EFFORT": "high",
+    "CAVEMAN_DEFAULT_MODE": "ultra"
   },
   "permissions": {
     "defaultMode": "bypassPermissions",
@@ -248,6 +251,46 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/hint-skill-jina-ai.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/hint-skill-read-url.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/prefer-limited-read.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/hint-skill-pueue.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -302,11 +345,11 @@
         ]
       },
       {
-        "matcher": "Read",
+        "matcher": "Read|Skill",
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/show-image-on-read.sh",
+            "command": "bash ~/.claude/hooks/recall-reminder-reset.sh",
             "timeout": 5
           }
         ]
@@ -330,6 +373,26 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash|Read|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/hint-fork-on-bloat.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/track-pueue-skill-load.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [
@@ -339,26 +402,6 @@
             "type": "command",
             "command": "~/.claude/hooks/audit-edits.py stop-hook",
             "timeout": 300,
-            "asyncRewake": true
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/drift-detect.py",
-            "timeout": 30,
-            "asyncRewake": true
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/marker-discipline.py",
-            "timeout": 15,
             "asyncRewake": true
           }
         ]
@@ -381,10 +424,30 @@
             "type": "command",
             "command": "bash ~/.claude/hooks/inject-system-load.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/recall-reminder.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/compact-bump.sh",
+            "timeout": 5
           }
         ]
       }
     ]
+  },
+  "worktree": {
+    "baseRef": "head"
   },
   "statusLine": {
     "type": "command",
@@ -392,17 +455,19 @@
     "refreshInterval": 5
   },
   "enabledPlugins": {
-    "pyright-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": false,
     "context7@claude-plugins-official": false,
-    "clangd-lsp@claude-plugins-official": true,
+    "clangd-lsp@claude-plugins-official": false,
     "claude-hud@claude-hud": false,
     "code-simplifier@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": false,
     "codex@openai-codex": true,
     "plugin-dev@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
-    "typescript-lsp@claude-plugins-official": true,
-    "lua-lsp@claude-plugins-official": true
+    "typescript-lsp@claude-plugins-official": false,
+    "lua-lsp@claude-plugins-official": false,
+    "caveman@caveman": true,
+    "superpowers@claude-plugins-official": false
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -416,10 +481,25 @@
         "source": "github",
         "repo": "openai/codex-plugin-cc"
       }
+    },
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "juliusbrussee/caveman"
+      }
+    },
+    "superpowers-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "obra/superpowers-marketplace"
+      }
+    },
+    "thedotmack": {
+      "source": {
+        "source": "github",
+        "repo": "thedotmack/claude-mem"
+      }
     }
-  },
-  "worktree": {
-    "baseRef": "head"
   },
   "viewMode": "default",
   "effortLevel": "xhigh",
@@ -436,7 +516,7 @@
   "autoScrollEnabled": true,
   "teammateMode": "auto",
   "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
-  "voiceEnabled": true,
-  "inputNeededNotifEnabled": true
+  "voiceEnabled": true
 }

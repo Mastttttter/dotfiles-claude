@@ -9,7 +9,7 @@ Per-session audit of Write / Edit / MultiEdit tool calls.
 Subcommands:
   hook            PreToolUse hook. Reads payload JSON on stdin and, on the
                   first time a file is touched in the session, snapshots the
-                  current on-disk content into /tmp/claude-audit/<SID>.json.
+                  current on-disk content into /tmp/claude-<UID>-state/audit/<SID>.json.
   show [SID]      Print git-style unified diff (with surrounding context) of
                   the recorded original vs current content for every file in
                   session SID. Defaults to the most recent session.
@@ -37,11 +37,23 @@ from pathlib import Path
 if hasattr(signal, "SIGPIPE"):
     signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
-AUDIT_DIR = Path("/tmp/claude-audit")
+AUDIT_DIR = Path(f"/tmp/claude-{os.getuid()}-state/audit")
 MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024  # skip files larger than 5 MB
 BINARY_SENTINEL = "\0BINARY\0"
 TOOLBIG_SENTINEL = "\0TOOBIG\0"
 CODEX_PROMPT_FILE = Path(__file__).parent / "audit-fresh-eye-codex.md"
+
+
+def should_skip_audit_path(abs_path: str, cwd: str) -> bool:
+    if abs_path.startswith("/tmp/"):
+        return True
+    if abs_path.startswith(str(AUDIT_DIR)):
+        return True
+    try:
+        rel = Path(abs_path).resolve().relative_to(Path(cwd).resolve())
+    except (OSError, ValueError):
+        return False
+    return bool(rel.parts) and rel.parts[0] == "temp"
 
 
 # ---------- storage ----------
@@ -80,7 +92,7 @@ def git_mode_of(path: Path) -> str | None:
 
 def with_session_locked(sid: str, mutate):
     """Load session JSON under flock, call mutate(data), persist atomically."""
-    AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    AUDIT_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     target = session_file(sid)
     lock_path = AUDIT_DIR / f"{sid}.lock"
     with open(lock_path, "w") as lock:
@@ -123,12 +135,7 @@ def cmd_hook() -> int:
     except OSError:
         abs_path = str(p)
 
-    # /tmp paths are typically one-off scripts (smoke tests, scratch files,
-    # downloaded artifacts) not worth long-term audit attention. The
-    # AUDIT_DIR exclusion below this is now subsumed but kept for clarity.
-    if abs_path.startswith("/tmp/"):
-        return 0
-    if abs_path.startswith(str(AUDIT_DIR)):
+    if should_skip_audit_path(abs_path, cwd):
         return 0
 
     sid = payload.get("session_id") or "unknown"
@@ -253,7 +260,7 @@ def cmd_show(sid: str | None, context: int, color: bool) -> int:
     if sid is None:
         sid = latest_session_id()
         if sid is None:
-            print("No audit data in /tmp/claude-audit.", file=sys.stderr)
+            print(f"No audit data in {AUDIT_DIR}.", file=sys.stderr)
             return 1
 
     f = session_file(sid)
@@ -386,8 +393,7 @@ def _render_fixes(issues: list[dict]) -> str:
             "or duplicate; dedup at your discretion."
         )
     preamble += (
-            " The audit feedbacks are not visible to user. Restate with a "
-            " **Audit feedbacks** section before refering to them."
+            " The audit feedbacks are not visible to user."
         )
     out: list[str] = [preamble, "", "FIXES:"]
     last_file: str | None = None
@@ -401,7 +407,7 @@ def _render_fixes(issues: list[dict]) -> str:
 
 
 def _stop_log(sid: str, msg: str) -> None:
-    AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    AUDIT_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
         with open(AUDIT_DIR / f"{sid}.stop.log", "a") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
@@ -469,7 +475,7 @@ def _append_history(record: dict, cwd: str, sid: str) -> None:
     with sub-PIPE_BUF writes is kernel-atomic; failures are swallowed."""
     target = HISTORY_DIR / _slug(cwd or "unknown") / f"{sid or 'unknown'}.jsonl"
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with target.open("a") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
     except OSError as e:
@@ -482,7 +488,7 @@ def _write_result(sid: str, verdict: str, claude_n: int = 0,
     statusLine renderer can call via `audit-edits.py statusline <sid>`).
     Atomic via tmp+os.replace so the renderer never reads a partial file.
     Schema is stable; readers consume .verdict / .claude_issues / .codex_issues."""
-    AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    AUDIT_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     target = AUDIT_DIR / f"{sid}.json.audit-result"
     tmp = AUDIT_DIR / f"{sid}.json.audit-result.tmp"
     payload = {
@@ -510,8 +516,13 @@ def _spawn_audit_claude(
         **os.environ,
         "CLAUDE_AUDIT_SUBAGENT": "1",
         "CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT": "1",
+        "CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS": "1",
+        "CLAUDE_CODE_DISABLE_POLICY_SKILLS": "1",
         "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
         "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+        "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
+        "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     }
     model = os.environ.get("AUDIT_CLAUDE_MODEL", "sonnet")
     effort = os.environ.get("AUDIT_CLAUDE_EFFORT")

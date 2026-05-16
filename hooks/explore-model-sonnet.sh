@@ -1,15 +1,17 @@
 #!/usr/bin/bash
-# Silently default model: "sonnet" for Explore subagents when omitted,
-# but only when the calling (main) agent is itself running on opus.
-# Sonnet/Haiku parents are left alone so we don't downgrade haiku → sonnet.
+# Silently default model: "sonnet" for research subagents (Explore, claude-
+# code-guide) when the caller omits a model, but only when the calling (main)
+# agent is itself running on opus. Sonnet/Haiku parents are left alone so we
+# don't downgrade haiku → sonnet.
 set -euo pipefail
 
 input=$(cat)
 
 subagent_type=$(jq -r '.tool_input.subagent_type // ""' <<< "$input")
-if [ "$subagent_type" != "Explore" ]; then
-    exit 0
-fi
+case "$subagent_type" in
+    Explore|claude-code-guide) ;;
+    *) exit 0 ;;
+esac
 
 model=$(jq -r '.tool_input.model // ""' <<< "$input")
 if [ -n "$model" ]; then

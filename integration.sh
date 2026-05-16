@@ -7,14 +7,6 @@ claude() {
     command claude --thinking-display summarized --allow-dangerously-skip-permissions "$@"
 }
 
-claude-simple() {
-    if [ $# -eq 0 ]; then
-        CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT=1 claude
-    else
-        CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT=1 "$@"
-    fi
-}
-
 opus() {
     claude --model opus "$@"
 }
@@ -42,6 +34,12 @@ commit() {
     if [ $# -gt 0 ]; then
         extra=" Additional user note to help you understand: $*"
     fi
+    CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT=1 \
+    CLAUDE_CODE_DISABLE_POLICY_SKILLS=1 \
+    CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 \
+    ENABLE_CLAUDEAI_MCP_SERVERS=false \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    AUDIT_BACKEND=none \
     timeout -v -s INT 80s claude -p --model haiku --max-turns 50 \
         "Make a git commit with commit message briefly describing what changed in the codebase. Stage and commit all changed files (including untracked ones). If some stagable files looks like should appear in .gitignore, add the file name pattern to .gitignore before stage. Do not edit files in this conversation.${extra}"
 }

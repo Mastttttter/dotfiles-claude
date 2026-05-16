@@ -3,6 +3,7 @@
 #   ZAI_API_KEY        → glm     (Zhipu BigModel)
 #   DEEPSEEK_API_KEY   → deepseek
 #   OPENROUTER_API_KEY → openrouter
+#   OFOX_API_KEY       → ofox    (OfoxAI aggregator, Gemini 3.1 pro
 #   LLAMA_API_KEY      → qwen
 #   (none)             → gpt     (ChatGPT OAuth — needs the codex-to-claude
 #                                 proxy running locally; see
@@ -21,6 +22,8 @@ function claude-with
             set -fx ANTHROPIC_AUTH_TOKEN $DEEPSEEK_API_KEY
         case openrouter
             set -fx ANTHROPIC_AUTH_TOKEN $OPENROUTER_API_KEY
+        case ofox
+            set -fx ANTHROPIC_AUTH_TOKEN $OFOX_API_KEY
         case qwen
             set -fx ANTHROPIC_AUTH_TOKEN $LLAMA_API_KEY
         case gpt
@@ -43,6 +46,10 @@ end
 
 function openrouter
     claude-with openrouter $argv
+end
+
+function ofox
+    claude-with ofox $argv
 end
 
 function qwen

@@ -66,6 +66,19 @@ assert_silent_env() {
   fi
 }
 
+assert_deny_env() {
+  local name="$1" input="$2" pattern="$3" env_name="$4" env_value="$5"
+  local out
+  out=$(printf '%s' "$input" | env "$env_name=$env_value" bash ~/.claude/hooks/$name.sh 2>&1)
+  if [ -z "$out" ] || ! echo "$out" | jq -e ".hookSpecificOutput.permissionDecision == \"deny\" and (.hookSpecificOutput.permissionDecisionReason | contains(\"$pattern\"))" > "$test_out"; then
+    echo "FAIL: $name should deny with pattern '$pattern' with $env_name=$env_value"
+    echo "  got: $out"
+    fail=1
+  else
+    echo "OK:   $name deny ($pattern, $env_name=$env_value)"
+  fi
+}
+
 assert_context_env() {
   local name="$1" input="$2" pattern="$3" env_name="$4" env_value="$5"
   local out
@@ -380,6 +393,7 @@ assert_silent no-pip-npm '{"tool_input":{"command":"sudo pnpm install"}}'
 
 assert_deny no-worktree-team '{"tool_input":{"isolation":"worktree","team_name":"foo"}}' "worktree silently fails"
 assert_silent no-worktree-team '{"tool_input":{"isolation":"worktree"}}'
+assert_silent no-worktree-team '{"tool_input":{"isolation":"worktree","team_name":""}}'
 
 assert_deny no-cat-write "$(jq -n --arg c "cat << EOF ${REDIR} /tmp/x
 hi
@@ -433,7 +447,7 @@ assert_deny no-head-read '{"tool_input":{"command":"sudo apt update; head -n 80 
 # truncates the internal pipeline output. First trigger per session emits
 # additionalContext; subsequent triggers in the same session are silent.
 nht_sid="nht-$$"
-nht_cache_dir=/tmp/claude-hint-no-head-tail-pipe
+nht_cache_dir=/tmp/claude-${UID}-state/hint-no-head-tail-pipe
 nht_cache="$nht_cache_dir/$nht_sid"
 rm -f "$nht_cache"
 
@@ -474,15 +488,50 @@ done
 
 rm -f "$nht_cache" "$nht_cache2"
 
-# no-bg-head-tail-pipe: hard-deny when run_in_background=true with trailing
-# `| head` / `| tail`. Foreground commands (handled by no-head-tail-pipe) and
-# intermediate `| head | wc` are pass-through.
+# Compact-reset: PostCompact bump should re-arm the one-shot so the hint
+# fires again after auto-compact. Behavioral lessons get summarized away
+# along with their context, so re-prompting on repeated anti-patterns
+# post-compact catches the forgetting.
+nht_sid_cmp="nht-cmp-$$"
+rm -rf "$nht_cache_dir" /tmp/claude-${UID}-state/compact-events
+# First fire — gen=0, hint emitted.
+out=$(printf '%s' "$(jq -nc --arg s "$nht_sid_cmp" '{session_id:$s,tool_input:{command:"ls | head"}}')" \
+       | bash ~/.claude/hooks/no-head-tail-pipe.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("truncates by line position")' > "$test_out" \
+  && echo "OK:   no-head-tail-pipe first fire (compact-rearm setup)" \
+  || { echo "FAIL: no-head-tail-pipe first fire for compact test: $out"; fail=1; }
+# Second fire same session — silent (one-shot still in effect).
+out=$(printf '%s' "$(jq -nc --arg s "$nht_sid_cmp" '{session_id:$s,tool_input:{command:"ls | head"}}')" \
+       | bash ~/.claude/hooks/no-head-tail-pipe.sh)
+[ -z "$out" ] \
+  && echo "OK:   no-head-tail-pipe silent before compact (compact-rearm setup)" \
+  || { echo "FAIL: no-head-tail-pipe should be silent before compact: $out"; fail=1; }
+# Simulate compaction.
+printf '{"session_id":"%s"}' "$nht_sid_cmp" | bash ~/.claude/hooks/compact-bump.sh
+# Same session, post-compact — hint re-fires.
+out=$(printf '%s' "$(jq -nc --arg s "$nht_sid_cmp" '{session_id:$s,tool_input:{command:"ls | head"}}')" \
+       | bash ~/.claude/hooks/no-head-tail-pipe.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("truncates by line position")' > "$test_out" \
+  && echo "OK:   no-head-tail-pipe re-fires after compact-bump" \
+  || { echo "FAIL: no-head-tail-pipe should re-fire after compact: $out"; fail=1; }
+rm -rf "$nht_cache_dir" /tmp/claude-${UID}-state/compact-events
+
+# no-bg-head-tail-pipe: hard-deny when run_in_background=true or timeout >=
+# BASH_MAX_TIMEOUT_MS with trailing `| head` / `| tail`. Foreground commands
+# under the timeout cap (handled by no-head-tail-pipe) and intermediate
+# `| head | wc` are pass-through.
 assert_deny no-bg-head-tail-pipe \
   '{"tool_input":{"command":"rg foo | head -n 20","run_in_background":true}}' \
-  "Background Bash"
+  "Background-risky Bash"
 assert_deny no-bg-head-tail-pipe \
   '{"tool_input":{"command":"./server | tail -f","run_in_background":true}}' \
-  "Background Bash"
+  "Background-risky Bash"
+assert_deny_env no-bg-head-tail-pipe \
+  '{"tool_input":{"command":"uv run python temp/maker_eda/run_eda.py 2>&1 | tail -50","timeout":600000}}' \
+  "Background-risky Bash" BASH_MAX_TIMEOUT_MS 600000
+assert_silent_env no-bg-head-tail-pipe \
+  '{"tool_input":{"command":"uv run python temp/maker_eda/run_eda.py 2>&1 | tail -50","timeout":599999}}' \
+  BASH_MAX_TIMEOUT_MS 600000
 assert_silent no-bg-head-tail-pipe \
   '{"tool_input":{"command":"rg foo | head -n 20","run_in_background":false}}'
 assert_silent no-bg-head-tail-pipe \
@@ -606,6 +655,12 @@ echo "$out" | jq -e '.hookSpecificOutput.permissionDecision == "allow" and .hook
   && echo "OK:   explore-model-sonnet injects sonnet for opus parent" \
   || { echo "FAIL: explore-model-sonnet opus-parent inject: $out"; fail=1; }
 
+# 1b. Opus parent + no model + claude-code-guide subagent → inject sonnet too
+out=$(printf '%s' "$(jq -nc --arg t "$em_opus" '{transcript_path:$t,tool_input:{subagent_type:"claude-code-guide",prompt:"x"}}')" | bash ~/.claude/hooks/explore-model-sonnet.sh)
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision == "allow" and .hookSpecificOutput.updatedInput.model == "sonnet"' > "$test_out" \
+  && echo "OK:   explore-model-sonnet injects sonnet for claude-code-guide opus parent" \
+  || { echo "FAIL: explore-model-sonnet claude-code-guide opus-parent inject: $out"; fail=1; }
+
 # 2. Haiku parent + no model → silent (don't downgrade haiku→sonnet)
 out=$(printf '%s' "$(jq -nc --arg t "$em_haiku" '{transcript_path:$t,tool_input:{subagent_type:"Explore",prompt:"x"}}')" | bash ~/.claude/hooks/explore-model-sonnet.sh)
 [ -z "$out" ] \
@@ -653,6 +708,10 @@ echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("WebFetch"
 out=$(printf '%s' '{"tool_response":{"results":[]}}' | bash ~/.claude/hooks/websearch-followup-hint.sh)
 [ -z "$out" ] && echo "OK:   websearch (0 results) silent" || { echo "FAIL: websearch 0 results: $out"; fail=1; }
 
+# Subagent skip: agent-* session_id silences the followup hint even with results.
+out=$(printf '%s' '{"session_id":"agent-deadbeef","tool_response":{"results":[{"url":"https://x","title":"X"}]}}' | bash ~/.claude/hooks/websearch-followup-hint.sh)
+[ -z "$out" ] && echo "OK:   websearch silent in subagent (agent-* sid)" || { echo "FAIL: websearch should skip subagent: $out"; fail=1; }
+
 assert_context reread-after-edit '{"tool_input":{"file_path":"/tmp/x.md"}}' "/tmp/x.md"
 assert_context reread-after-edit '{"tool_input":{"file_path":"/tmp/x.py"}}' "/tmp/x.py"
 # Basename special-case: CMakeLists.txt routes to CODE despite the .txt extension.
@@ -677,6 +736,8 @@ assert_context_env cache-keepalive-hint '{"tool_name":"Bash","tool_input":{"run_
 assert_silent_env cache-keepalive-hint '{"tool_name":"Bash","tool_input":{"run_in_background":true,"command":"sleep 60"}}' ANTHROPIC_BASE_URL "https://api.deepseek.com/anthropic"
 assert_silent_env cache-keepalive-hint '{"tool_name":"Agent","tool_input":{"run_in_background":true}}' ANTHROPIC_DEFAULT_MODEL "gpt-5.4"
 assert_silent cache-keepalive-hint '{"tool_name":"Bash","tool_input":{"command":"ls"},"tool_response":{}}'
+# Subagent session_id (agent-* prefix): silent even on backgrounded Bash.
+assert_silent cache-keepalive-hint '{"session_id":"agent-deadbeef1234","tool_name":"Bash","tool_input":{"run_in_background":true,"command":"sleep 60"}}'
 
 # prefer-uv-run: fires on bare python3; silent when uv run is already used
 assert_context prefer-uv-run '{"tool_input":{"command":"python3 foo.py"}}' "uv run python"
@@ -708,9 +769,9 @@ echo "$out" | jq -e '.hookSpecificOutput.additionalContext | startswith("Message
 
 # inject-git-status: emits "Git status:" context inside a repo, silent outside,
 # and silent on a repeat fire when status hasn't changed (cached at
-# /tmp/claude-git-status/<SID>). Hook depends on cwd, so pin both explicitly.
+# /tmp/claude-${UID}-state/git-status/<SID>). Hook depends on cwd, so pin both explicitly.
 sid="test-$$"
-rm -f "/tmp/claude-git-status/$sid"
+rm -f "/tmp/claude-${UID}-state/git-status/$sid"
 gs_in="{\"session_id\":\"$sid\"}"
 
 out=$(cd ~/.claude && printf '%s' "$gs_in" | bash ~/.claude/hooks/inject-git-status.sh)
@@ -729,7 +790,7 @@ out=$(cd /tmp && printf '%s' "$gs_in" | bash ~/.claude/hooks/inject-git-status.s
   && echo "OK:   inject-git-status silent outside repo" \
   || { echo "FAIL: inject-git-status outside repo: $out"; fail=1; }
 
-rm -f "/tmp/claude-git-status/$sid"
+rm -f "/tmp/claude-${UID}-state/git-status/$sid"
 
 # inject-system-load: silent when thresholds pinned impossibly high,
 # fires when a single path is forced low (DISK below — see trip block
@@ -757,7 +818,7 @@ TRIP_ENV=(
 # can't bleed across harness invocations.
 sysl_sid="syslt-$$"
 sysl_in="{\"session_id\":\"$sysl_sid\"}"
-sysl_cache="/tmp/claude-system-load/$sysl_sid"
+sysl_cache="/tmp/claude-${UID}-state/system-load/$sysl_sid"
 rm -f "$sysl_cache"
 
 out=$(env "${SILENT_ENV[@]}" bash ~/.claude/hooks/inject-system-load.sh <<< "$sysl_in")
@@ -808,13 +869,92 @@ echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("DISK")' >
 
 rm -f "$sysl_cache"
 
+# recall-reminder: silent for first (interval-1) turns, fires on the
+# interval-th turn, then resets and stays silent again. Counter is per
+# session_id under /tmp/claude-${UID}-state/recall-reminder/.
+rr_sid="rr-$$"
+rr_cache="/tmp/claude-${UID}-state/recall-reminder/$rr_sid"
+rm -f "$rr_cache"
+rr_in=$(jq -nc --arg s "$rr_sid" '{session_id:$s}')
+
+# Interval forced to 3 so the test stays small.
+out=$(RECALL_REMINDER_INTERVAL=3 bash ~/.claude/hooks/recall-reminder.sh <<< "$rr_in")
+[ -z "$out" ] \
+  && echo "OK:   recall-reminder silent on turn 1 (interval=3)" \
+  || { echo "FAIL: recall-reminder should be silent on turn 1: $out"; fail=1; }
+
+out=$(RECALL_REMINDER_INTERVAL=3 bash ~/.claude/hooks/recall-reminder.sh <<< "$rr_in")
+[ -z "$out" ] \
+  && echo "OK:   recall-reminder silent on turn 2 (interval=3)" \
+  || { echo "FAIL: recall-reminder should be silent on turn 2: $out"; fail=1; }
+
+out=$(RECALL_REMINDER_INTERVAL=3 bash ~/.claude/hooks/recall-reminder.sh <<< "$rr_in")
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("memory/pitfalls.md")' > "$test_out" \
+  && echo "OK:   recall-reminder fires on turn 3 (interval=3)" \
+  || { echo "FAIL: recall-reminder should fire on turn 3: $out"; fail=1; }
+
+# After fire, counter should be reset → next turn silent again.
+out=$(RECALL_REMINDER_INTERVAL=3 bash ~/.claude/hooks/recall-reminder.sh <<< "$rr_in")
+[ -z "$out" ] \
+  && echo "OK:   recall-reminder silent on turn after reset" \
+  || { echo "FAIL: recall-reminder should be silent after reset: $out"; fail=1; }
+
+rm -f "$rr_cache"
+
+# recall-reminder-reset: zeros the counter when Read touches a
+# memory page (incl. pitfalls.md), or when Skill invokes memory-add.
+rrr_sid="rrr-$$"
+rrr_cache="/tmp/claude-${UID}-state/recall-reminder/$rrr_sid"
+mkdir -p /tmp/claude-${UID}-state/recall-reminder
+
+# Pre-seed counter at 7 so we can observe reset to 0.
+echo 7 > "$rrr_cache"
+rrr_in=$(jq -nc --arg s "$rrr_sid" '{session_id:$s,tool_name:"Read",tool_input:{file_path:"/home/ubuntu/.claude/memory/pitfalls.md"}}')
+bash ~/.claude/hooks/recall-reminder-reset.sh <<< "$rrr_in"
+[ "$(cat "$rrr_cache")" = "0" ] \
+  && echo "OK:   recall-reminder-reset zeros on Read of pitfalls page" \
+  || { echo "FAIL: recall-reminder-reset Read pitfalls page: $(cat "$rrr_cache")"; fail=1; }
+
+echo 7 > "$rrr_cache"
+rrr_in=$(jq -nc --arg s "$rrr_sid" '{session_id:$s,tool_name:"Read",tool_input:{file_path:"/home/ubuntu/.claude/memory/pages/git-and-commits.md"}}')
+bash ~/.claude/hooks/recall-reminder-reset.sh <<< "$rrr_in"
+[ "$(cat "$rrr_cache")" = "0" ] \
+  && echo "OK:   recall-reminder-reset zeros on Read of memory page" \
+  || { echo "FAIL: recall-reminder-reset Read memory page: $(cat "$rrr_cache")"; fail=1; }
+
+# Read of unrelated file → counter untouched.
+echo 7 > "$rrr_cache"
+rrr_in=$(jq -nc --arg s "$rrr_sid" '{session_id:$s,tool_name:"Read",tool_input:{file_path:"/tmp/other.md"}}')
+bash ~/.claude/hooks/recall-reminder-reset.sh <<< "$rrr_in"
+[ "$(cat "$rrr_cache")" = "7" ] \
+  && echo "OK:   recall-reminder-reset leaves counter on Read of unrelated file" \
+  || { echo "FAIL: recall-reminder-reset Read unrelated: $(cat "$rrr_cache")"; fail=1; }
+
+# Skill invocation of memory-add → reset.
+echo 7 > "$rrr_cache"
+rrr_in=$(jq -nc --arg s "$rrr_sid" '{session_id:$s,tool_name:"Skill",tool_input:{skill:"memory-add"}}')
+bash ~/.claude/hooks/recall-reminder-reset.sh <<< "$rrr_in"
+[ "$(cat "$rrr_cache")" = "0" ] \
+  && echo "OK:   recall-reminder-reset zeros on Skill=memory-add" \
+  || { echo "FAIL: recall-reminder-reset Skill memory-add: $(cat "$rrr_cache")"; fail=1; }
+
+# Skill invocation of unrelated skill → counter untouched.
+echo 7 > "$rrr_cache"
+rrr_in=$(jq -nc --arg s "$rrr_sid" '{session_id:$s,tool_name:"Skill",tool_input:{skill:"read-url"}}')
+bash ~/.claude/hooks/recall-reminder-reset.sh <<< "$rrr_in"
+[ "$(cat "$rrr_cache")" = "7" ] \
+  && echo "OK:   recall-reminder-reset leaves counter on Skill=read-url" \
+  || { echo "FAIL: recall-reminder-reset Skill unrelated: $(cat "$rrr_cache")"; fail=1; }
+
+rm -f "$rrr_cache"
+
 echo ""
 echo "=== Skill-recall hint hooks ==="
 
 # hint-skill-frontend-design: nudge agent to load the frontend-design skill
 # before writing an HTML file. Once-per-session cache (signature: session_id).
 hsfd_sid="hsfd-$$"
-hsfd_cache="/tmp/claude-skill-hint-frontend-design/$hsfd_sid"
+hsfd_cache="/tmp/claude-${UID}-state/skill-hint-frontend-design/$hsfd_sid"
 rm -f "$hsfd_cache"
 
 # 1. .html first fire → emit hint
@@ -840,7 +980,7 @@ out=$(printf '%s' "$(jq -nc --arg s "$hsfd_sid" '{session_id:$s,tool_input:{file
 
 # 4. Different session → hint emitted again (cache is per-session)
 hsfd_sid2="hsfd2-$$"
-hsfd_cache2="/tmp/claude-skill-hint-frontend-design/$hsfd_sid2"
+hsfd_cache2="/tmp/claude-${UID}-state/skill-hint-frontend-design/$hsfd_sid2"
 rm -f "$hsfd_cache2"
 out=$(printf '%s' "$(jq -nc --arg s "$hsfd_sid2" '{session_id:$s,tool_input:{file_path:"/tmp/z.html",content:"<html/>"}}')" \
        | bash ~/.claude/hooks/hint-skill-frontend-design.sh)
@@ -856,7 +996,34 @@ echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("frontend-
   && echo "OK:   hint-skill-frontend-design fires on .htm too" \
   || { echo "FAIL: hint-skill-frontend-design .htm: $out"; fail=1; }
 
-rm -f "$hsfd_cache" "$hsfd_cache2" "/tmp/claude-skill-hint-frontend-design/$hsfd_sid3"
+rm -f "$hsfd_cache" "$hsfd_cache2" "/tmp/claude-${UID}-state/skill-hint-frontend-design/$hsfd_sid3"
+
+# Subagent skip: agent-* session_id silences the hint.
+out=$(printf '%s' "$(jq -nc '{session_id:"agent-deadbeef",tool_input:{file_path:"/tmp/x.html",content:"<html/>"}}')" \
+       | bash ~/.claude/hooks/hint-skill-frontend-design.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-frontend-design silent in subagent (agent-* sid)" \
+  || { echo "FAIL: hint-skill-frontend-design should skip subagent: $out"; fail=1; }
+
+# Compact-reset: PostCompact bump re-arms the one-shot post-compact.
+hsfd_sid_cmp="hsfd-cmp-$$"
+rm -rf /tmp/claude-${UID}-state/skill-hint-frontend-design /tmp/claude-${UID}-state/compact-events
+out=$(printf '%s' "$(jq -nc --arg s "$hsfd_sid_cmp" '{session_id:$s,tool_input:{file_path:"/tmp/a.html",content:"<html/>"}}')" \
+       | bash ~/.claude/hooks/hint-skill-frontend-design.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("frontend-design")' > "$test_out" \
+  && echo "OK:   hint-skill-frontend-design first fire (compact-rearm setup)" \
+  || { echo "FAIL: hint-skill-frontend-design first fire for compact test: $out"; fail=1; }
+out=$(printf '%s' "$(jq -nc --arg s "$hsfd_sid_cmp" '{session_id:$s,tool_input:{file_path:"/tmp/b.html",content:"<html/>"}}')" \
+       | bash ~/.claude/hooks/hint-skill-frontend-design.sh)
+[ -z "$out" ] && echo "OK:   hint-skill-frontend-design silent before compact" \
+  || { echo "FAIL: hint-skill-frontend-design pre-compact silent: $out"; fail=1; }
+printf '{"session_id":"%s"}' "$hsfd_sid_cmp" | bash ~/.claude/hooks/compact-bump.sh
+out=$(printf '%s' "$(jq -nc --arg s "$hsfd_sid_cmp" '{session_id:$s,tool_input:{file_path:"/tmp/c.html",content:"<html/>"}}')" \
+       | bash ~/.claude/hooks/hint-skill-frontend-design.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("frontend-design")' > "$test_out" \
+  && echo "OK:   hint-skill-frontend-design re-fires after compact-bump" \
+  || { echo "FAIL: hint-skill-frontend-design should re-fire after compact: $out"; fail=1; }
+rm -rf /tmp/claude-${UID}-state/skill-hint-frontend-design /tmp/claude-${UID}-state/compact-events
 
 
 # hint-agent-claude-code-guide: nudge the agent to consult the
@@ -866,7 +1033,7 @@ rm -f "$hsfd_cache" "$hsfd_cache2" "/tmp/claude-skill-hint-frontend-design/$hsfd
 # (CLAUDE.md, memory/, plugins/, ...) are silent.
 # Once-per-session cache (signature: session_id).
 hccg_sid="hccg-$$"
-hccg_cache="/tmp/claude-hint-agent-claude-code-guide/$hccg_sid"
+hccg_cache="/tmp/claude-${UID}-state/hint-agent-claude-code-guide/$hccg_sid"
 rm -f "$hccg_cache"
 
 # 1. Absolute path under ~/.claude/ → emit hint
@@ -956,10 +1123,336 @@ out=$(printf '%s' "$(jq -nc --arg s "$hccg_sid10" '{session_id:$s,tool_input:{fi
   || { echo "FAIL: hint-agent-claude-code-guide memory FP: $out"; fail=1; }
 
 rm -f "$hccg_cache" \
-      "/tmp/claude-hint-agent-claude-code-guide/$hccg_sid2" \
-      "/tmp/claude-hint-agent-claude-code-guide/$hccg_sid3" \
-      "/tmp/claude-hint-agent-claude-code-guide/$hccg_sid7" \
-      "/tmp/claude-hint-agent-claude-code-guide/$hccg_sid8"
+      "/tmp/claude-${UID}-state/hint-agent-claude-code-guide/$hccg_sid2" \
+      "/tmp/claude-${UID}-state/hint-agent-claude-code-guide/$hccg_sid3" \
+      "/tmp/claude-${UID}-state/hint-agent-claude-code-guide/$hccg_sid7" \
+      "/tmp/claude-${UID}-state/hint-agent-claude-code-guide/$hccg_sid8"
+
+# Subagent skip: agent-* session_id silences the hint. Most subagents lack
+# the Agent tool and can't act on the "spawn claude-code-guide subagent" advice.
+out=$(printf '%s' "$(jq -nc '{session_id:"agent-deadbeef",tool_input:{file_path:"/home/bate/.claude/settings.json"}}')" \
+       | bash ~/.claude/hooks/hint-agent-claude-code-guide.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-agent-claude-code-guide silent in subagent (agent-* sid)" \
+  || { echo "FAIL: hint-agent-claude-code-guide should skip subagent: $out"; fail=1; }
+
+# Compact-reset: PostCompact bump re-arms the one-shot post-compact.
+hccg_sid_cmp="hccg-cmp-$$"
+rm -rf /tmp/claude-${UID}-state/hint-agent-claude-code-guide /tmp/claude-${UID}-state/compact-events
+out=$(printf '%s' "$(jq -nc --arg s "$hccg_sid_cmp" '{session_id:$s,tool_input:{file_path:"/home/bate/.claude/settings.json"}}')" \
+       | bash ~/.claude/hooks/hint-agent-claude-code-guide.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("claude-code-guide")' > "$test_out" \
+  && echo "OK:   hint-agent-claude-code-guide first fire (compact-rearm setup)" \
+  || { echo "FAIL: hint-agent-claude-code-guide first fire for compact test: $out"; fail=1; }
+out=$(printf '%s' "$(jq -nc --arg s "$hccg_sid_cmp" '{session_id:$s,tool_input:{file_path:"/home/bate/.claude/hooks/foo.sh"}}')" \
+       | bash ~/.claude/hooks/hint-agent-claude-code-guide.sh)
+[ -z "$out" ] && echo "OK:   hint-agent-claude-code-guide silent before compact" \
+  || { echo "FAIL: hint-agent-claude-code-guide pre-compact silent: $out"; fail=1; }
+printf '{"session_id":"%s"}' "$hccg_sid_cmp" | bash ~/.claude/hooks/compact-bump.sh
+out=$(printf '%s' "$(jq -nc --arg s "$hccg_sid_cmp" '{session_id:$s,tool_input:{file_path:"/home/bate/.claude/skills/bar.md"}}')" \
+       | bash ~/.claude/hooks/hint-agent-claude-code-guide.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("claude-code-guide")' > "$test_out" \
+  && echo "OK:   hint-agent-claude-code-guide re-fires after compact-bump" \
+  || { echo "FAIL: hint-agent-claude-code-guide should re-fire after compact: $out"; fail=1; }
+rm -rf /tmp/claude-${UID}-state/hint-agent-claude-code-guide /tmp/claude-${UID}-state/compact-events
+
+
+# hint-skill-jina-ai: nudge agent to load the jina-ai skill before calling
+# WebSearch. Once-per-session cache (signature: session_id).
+hsja_sid="hsja-$$"
+hsja_cache="/tmp/claude-${UID}-state/skill-hint-jina-ai/$hsja_sid"
+rm -f "$hsja_cache"
+
+# 1. WebSearch first fire → emit hint
+out=$(printf '%s' "$(jq -nc --arg s "$hsja_sid" '{session_id:$s,tool_name:"WebSearch",tool_input:{query:"foo"}}')" \
+       | bash ~/.claude/hooks/hint-skill-jina-ai.sh)
+echo "$out" | jq -e '(.hookSpecificOutput.permissionDecision | not) and (.hookSpecificOutput.additionalContext | contains("/jina-ai"))' > "$test_out" \
+  && echo "OK:   hint-skill-jina-ai fires on first WebSearch call" \
+  || { echo "FAIL: hint-skill-jina-ai first WebSearch: $out"; fail=1; }
+
+# 2. WebSearch second fire same session → cache hit, silent
+out=$(printf '%s' "$(jq -nc --arg s "$hsja_sid" '{session_id:$s,tool_name:"WebSearch",tool_input:{query:"bar"}}')" \
+       | bash ~/.claude/hooks/hint-skill-jina-ai.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-jina-ai silent on repeat in same session" \
+  || { echo "FAIL: hint-skill-jina-ai should be silent on repeat: $out"; fail=1; }
+
+# 3. Different session → hint re-fires (cache is per-session)
+hsja_sid2="hsja2-$$"
+hsja_cache2="/tmp/claude-${UID}-state/skill-hint-jina-ai/$hsja_sid2"
+rm -f "$hsja_cache2"
+out=$(printf '%s' "$(jq -nc --arg s "$hsja_sid2" '{session_id:$s,tool_name:"WebSearch",tool_input:{query:"baz"}}')" \
+       | bash ~/.claude/hooks/hint-skill-jina-ai.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("/jina-ai")' > "$test_out" \
+  && echo "OK:   hint-skill-jina-ai re-fires for new session_id" \
+  || { echo "FAIL: hint-skill-jina-ai new session: $out"; fail=1; }
+
+rm -f "$hsja_cache" "$hsja_cache2"
+
+# Subagent skip: agent-* session_id silences the hint.
+out=$(printf '%s' "$(jq -nc '{session_id:"agent-deadbeef",tool_name:"WebSearch",tool_input:{query:"foo"}}')" \
+       | bash ~/.claude/hooks/hint-skill-jina-ai.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-jina-ai silent in subagent (agent-* sid)" \
+  || { echo "FAIL: hint-skill-jina-ai should skip subagent: $out"; fail=1; }
+
+# Compact-reset: PostCompact bump re-arms the one-shot post-compact.
+hsja_sid_cmp="hsja-cmp-$$"
+rm -rf /tmp/claude-${UID}-state/skill-hint-jina-ai /tmp/claude-${UID}-state/compact-events
+out=$(printf '%s' "$(jq -nc --arg s "$hsja_sid_cmp" '{session_id:$s,tool_name:"WebSearch",tool_input:{query:"foo"}}')" \
+       | bash ~/.claude/hooks/hint-skill-jina-ai.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("/jina-ai")' > "$test_out" \
+  && echo "OK:   hint-skill-jina-ai first fire (compact-rearm setup)" \
+  || { echo "FAIL: hint-skill-jina-ai first fire for compact test: $out"; fail=1; }
+out=$(printf '%s' "$(jq -nc --arg s "$hsja_sid_cmp" '{session_id:$s,tool_name:"WebSearch",tool_input:{query:"bar"}}')" \
+       | bash ~/.claude/hooks/hint-skill-jina-ai.sh)
+[ -z "$out" ] && echo "OK:   hint-skill-jina-ai silent before compact" \
+  || { echo "FAIL: hint-skill-jina-ai pre-compact silent: $out"; fail=1; }
+printf '{"session_id":"%s"}' "$hsja_sid_cmp" | bash ~/.claude/hooks/compact-bump.sh
+out=$(printf '%s' "$(jq -nc --arg s "$hsja_sid_cmp" '{session_id:$s,tool_name:"WebSearch",tool_input:{query:"baz"}}')" \
+       | bash ~/.claude/hooks/hint-skill-jina-ai.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("/jina-ai")' > "$test_out" \
+  && echo "OK:   hint-skill-jina-ai re-fires after compact-bump" \
+  || { echo "FAIL: hint-skill-jina-ai should re-fire after compact: $out"; fail=1; }
+rm -rf /tmp/claude-${UID}-state/skill-hint-jina-ai /tmp/claude-${UID}-state/compact-events
+
+
+# hint-skill-read-url: nudge agent to load the read-url skill before calling
+# WebFetch. Once-per-session cache (signature: session_id).
+hsru_sid="hsru-$$"
+hsru_cache="/tmp/claude-${UID}-state/skill-hint-read-url/$hsru_sid"
+rm -f "$hsru_cache"
+
+# 1. WebFetch first fire → emit hint
+out=$(printf '%s' "$(jq -nc --arg s "$hsru_sid" '{session_id:$s,tool_name:"WebFetch",tool_input:{url:"https://example.com"}}')" \
+       | bash ~/.claude/hooks/hint-skill-read-url.sh)
+echo "$out" | jq -e '(.hookSpecificOutput.permissionDecision | not) and (.hookSpecificOutput.additionalContext | contains("/read-url"))' > "$test_out" \
+  && echo "OK:   hint-skill-read-url fires on first WebFetch call" \
+  || { echo "FAIL: hint-skill-read-url first WebFetch: $out"; fail=1; }
+
+# 2. WebFetch second fire same session → cache hit, silent
+out=$(printf '%s' "$(jq -nc --arg s "$hsru_sid" '{session_id:$s,tool_name:"WebFetch",tool_input:{url:"https://example.org"}}')" \
+       | bash ~/.claude/hooks/hint-skill-read-url.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-read-url silent on repeat in same session" \
+  || { echo "FAIL: hint-skill-read-url should be silent on repeat: $out"; fail=1; }
+
+# 3. Different session → hint re-fires (cache is per-session)
+hsru_sid2="hsru2-$$"
+hsru_cache2="/tmp/claude-${UID}-state/skill-hint-read-url/$hsru_sid2"
+rm -f "$hsru_cache2"
+out=$(printf '%s' "$(jq -nc --arg s "$hsru_sid2" '{session_id:$s,tool_name:"WebFetch",tool_input:{url:"https://example.net"}}')" \
+       | bash ~/.claude/hooks/hint-skill-read-url.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("/read-url")' > "$test_out" \
+  && echo "OK:   hint-skill-read-url re-fires for new session_id" \
+  || { echo "FAIL: hint-skill-read-url new session: $out"; fail=1; }
+
+rm -f "$hsru_cache" "$hsru_cache2"
+
+# Subagent skip: agent-* session_id silences the hint.
+out=$(printf '%s' "$(jq -nc '{session_id:"agent-deadbeef",tool_name:"WebFetch",tool_input:{url:"https://example.com"}}')" \
+       | bash ~/.claude/hooks/hint-skill-read-url.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-read-url silent in subagent (agent-* sid)" \
+  || { echo "FAIL: hint-skill-read-url should skip subagent: $out"; fail=1; }
+
+# Compact-reset: PostCompact bump re-arms the one-shot post-compact.
+hsru_sid_cmp="hsru-cmp-$$"
+rm -rf /tmp/claude-${UID}-state/skill-hint-read-url /tmp/claude-${UID}-state/compact-events
+out=$(printf '%s' "$(jq -nc --arg s "$hsru_sid_cmp" '{session_id:$s,tool_name:"WebFetch",tool_input:{url:"https://example.com"}}')" \
+       | bash ~/.claude/hooks/hint-skill-read-url.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("/read-url")' > "$test_out" \
+  && echo "OK:   hint-skill-read-url first fire (compact-rearm setup)" \
+  || { echo "FAIL: hint-skill-read-url first fire for compact test: $out"; fail=1; }
+out=$(printf '%s' "$(jq -nc --arg s "$hsru_sid_cmp" '{session_id:$s,tool_name:"WebFetch",tool_input:{url:"https://example.org"}}')" \
+       | bash ~/.claude/hooks/hint-skill-read-url.sh)
+[ -z "$out" ] && echo "OK:   hint-skill-read-url silent before compact" \
+  || { echo "FAIL: hint-skill-read-url pre-compact silent: $out"; fail=1; }
+printf '{"session_id":"%s"}' "$hsru_sid_cmp" | bash ~/.claude/hooks/compact-bump.sh
+out=$(printf '%s' "$(jq -nc --arg s "$hsru_sid_cmp" '{session_id:$s,tool_name:"WebFetch",tool_input:{url:"https://example.net"}}')" \
+       | bash ~/.claude/hooks/hint-skill-read-url.sh)
+echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("/read-url")' > "$test_out" \
+  && echo "OK:   hint-skill-read-url re-fires after compact-bump" \
+  || { echo "FAIL: hint-skill-read-url should re-fire after compact: $out"; fail=1; }
+rm -rf /tmp/claude-${UID}-state/skill-hint-read-url /tmp/claude-${UID}-state/compact-events
+
+# === prefer-limited-read ===
+plr_big_lines=$(mktemp /tmp/plr-big-lines-XXXXXX)
+plr_big_bytes=$(mktemp /tmp/plr-big-bytes-XXXXXX)
+plr_small=$(mktemp /tmp/plr-small-XXXXXX)
+# 400 lines × ~3 bytes/line ≈ 1.6 KB — triggers by line count, NOT by bytes.
+seq 1 400 > "$plr_big_lines"
+# 50 lines × 401 bytes ≈ 20 KB — triggers by bytes, NOT by line count.
+awk 'BEGIN{for(i=0;i<50;i++){for(j=0;j<400;j++)printf"x";print""}}' > "$plr_big_bytes"
+# 50 lines × ~3 bytes — under both thresholds, allowed.
+seq 1 50 > "$plr_small"
+
+assert_deny   prefer-limited-read "$(jq -n --arg fp "$plr_big_lines" '{tool_input:{file_path:$fp}}')" "400 lines"
+assert_deny   prefer-limited-read "$(jq -n --arg fp "$plr_big_bytes" '{tool_input:{file_path:$fp}}')" "KB"
+assert_silent prefer-limited-read "$(jq -n --arg fp "$plr_big_lines" '{tool_input:{file_path:$fp,limit:100}}')"
+assert_silent prefer-limited-read "$(jq -n --arg fp "$plr_big_bytes" '{tool_input:{file_path:$fp,limit:100}}')"
+assert_silent prefer-limited-read "$(jq -n --arg fp "$plr_small" '{tool_input:{file_path:$fp}}')"
+assert_silent prefer-limited-read '{"tool_input":{"file_path":"/tmp/does-not-exist-plr"}}'
+assert_silent prefer-limited-read '{"tool_input":{}}'
+
+rm -f "$plr_big_lines" "$plr_big_bytes" "$plr_small"
+
+# === hint-fork-on-bloat ===
+# 60 KB string payload — single call crosses the 50 KB threshold.
+hfb_big_payload=$(awk 'BEGIN{for(i=0;i<60;i++){for(j=0;j<1024;j++)printf"x";print""}}')
+# 1 KB payload — well below threshold, two calls still silent.
+hfb_small_payload=$(awk 'BEGIN{for(j=0;j<1024;j++)printf"x"}')
+
+# Clean any stale state from prior runs.
+rm -rf /tmp/claude-${UID}-state/hint-fork-bloat
+
+assert_silent hint-fork-on-bloat "$(jq -n --arg p "$hfb_small_payload" '{session_id:"hfb_small_sess",tool_response:$p}')"
+assert_silent hint-fork-on-bloat "$(jq -n --arg p "$hfb_small_payload" '{session_id:"hfb_small_sess",tool_response:$p}')"
+assert_context hint-fork-on-bloat "$(jq -n --arg p "$hfb_big_payload" '{session_id:"hfb_big_sess",tool_response:$p}')" "Fork-first on Surveys"
+# Already fired in hfb_big_sess: subsequent calls silent (one-shot).
+assert_silent hint-fork-on-bloat "$(jq -n --arg p "$hfb_big_payload" '{session_id:"hfb_big_sess",tool_response:$p}')"
+# Missing session_id: silent.
+assert_silent hint-fork-on-bloat "$(jq -n --arg p "$hfb_big_payload" '{tool_response:$p}')"
+# Empty tool_response: silent.
+assert_silent hint-fork-on-bloat '{"session_id":"hfb_empty_sess","tool_response":""}'
+# Subagent session_id (agent-* prefix): silent even with big payload.
+assert_silent hint-fork-on-bloat "$(jq -n --arg p "$hfb_big_payload" '{session_id:"agent-deadbeef1234",tool_response:$p}')"
+
+# Compact-reset: after firing, a PostCompact bump should re-arm the hint so
+# the next bloat cycle fires again. Uses the shared compact-bump generation
+# file owned by compact-bump.sh (PostCompact).
+rm -rf /tmp/claude-${UID}-state/hint-fork-bloat /tmp/claude-${UID}-state/compact-events
+# First fire — gen starts at 0 (no PostCompact yet).
+assert_context hint-fork-on-bloat "$(jq -n --arg p "$hfb_big_payload" '{session_id:"hfb_compact_sess",tool_response:$p}')" "Fork-first on Surveys"
+# Same session, no compact yet — silent (one-shot still in effect).
+assert_silent hint-fork-on-bloat "$(jq -n --arg p "$hfb_big_payload" '{session_id:"hfb_compact_sess",tool_response:$p}')"
+# Simulate a compaction by invoking compact-bump.sh — gen 0 → 1.
+printf '{"session_id":"hfb_compact_sess"}' | bash ~/.claude/hooks/compact-bump.sh
+# Now the hint re-fires because current_gen (1) > prev_gen (0).
+assert_context hint-fork-on-bloat "$(jq -n --arg p "$hfb_big_payload" '{session_id:"hfb_compact_sess",tool_response:$p}')" "Fork-first on Surveys"
+# After re-fire, silent again on the next call.
+assert_silent hint-fork-on-bloat "$(jq -n --arg p "$hfb_big_payload" '{session_id:"hfb_compact_sess",tool_response:$p}')"
+
+rm -rf /tmp/claude-${UID}-state/hint-fork-bloat /tmp/claude-${UID}-state/compact-events
+
+# === compact-bump ===
+# PostCompact hook: increments per-session generation counter. Silent stdout;
+# state is the file. Verify increment, missing-session-id silent no-op.
+rm -rf /tmp/claude-${UID}-state/compact-events
+assert_silent compact-bump '{"session_id":"cb_sess"}'
+[ "$(cat /tmp/claude-${UID}-state/compact-events/cb_sess.gen 2>&1)" = "1" ] \
+  && echo "OK:   compact-bump gen 0 → 1" \
+  || { echo "FAIL: compact-bump first call should set gen=1"; fail=1; }
+assert_silent compact-bump '{"session_id":"cb_sess"}'
+[ "$(cat /tmp/claude-${UID}-state/compact-events/cb_sess.gen 2>&1)" = "2" ] \
+  && echo "OK:   compact-bump gen 1 → 2" \
+  || { echo "FAIL: compact-bump second call should set gen=2"; fail=1; }
+# Missing session_id: silent and no file written.
+assert_silent compact-bump '{}'
+[ -z "$(ls /tmp/claude-${UID}-state/compact-events/ 2>&1 | rg -v '^cb_sess')" ] \
+  && echo "OK:   compact-bump silent on missing session_id" \
+  || { echo "FAIL: compact-bump should not write file without session_id"; fail=1; }
+
+rm -rf /tmp/claude-${UID}-state/compact-events
+
+# hint-skill-pueue: block pueue commands until /pueue skill loaded.
+# Denies once per session per compact; skill load unlocks; subagents pass.
+hsp_sid="hsp-$$"
+rm -rf /tmp/claude-${UID}-state/pueue-skill-loaded /tmp/claude-${UID}-state/pueue-skill-hint /tmp/claude-${UID}-state/compact-events
+
+# 1. First pueue command → deny with /pueue mention
+out=$(jq -nc --arg s "$hsp_sid" '{session_id:$s,tool_name:"Bash",tool_input:{command:"pueue add -- echo hi"}}' \
+       | bash ~/.claude/hooks/hint-skill-pueue.sh)
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | contains("/pueue"))' > "$test_out" \
+  && echo "OK:   hint-skill-pueue denies first pueue command" \
+  || { echo "FAIL: hint-skill-pueue first pueue: $out"; fail=1; }
+
+# 2. Second pueue command same session (hint already given) → one-shot, allow
+out=$(jq -nc --arg s "$hsp_sid" '{session_id:$s,tool_name:"Bash",tool_input:{command:"pueue status"}}' \
+       | bash ~/.claude/hooks/hint-skill-pueue.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-pueue silent on repeat (one-shot)" \
+  || { echo "FAIL: hint-skill-pueue should be silent after one-shot: $out"; fail=1; }
+
+# 3. Non-pueue command → always silent
+out=$(jq -nc --arg s "$hsp_sid" '{session_id:$s,tool_name:"Bash",tool_input:{command:"echo hello"}}' \
+       | bash ~/.claude/hooks/hint-skill-pueue.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-pueue silent for non-pueue command" \
+  || { echo "FAIL: hint-skill-pueue should ignore non-pueue: $out"; fail=1; }
+
+# 4. Subagent (agent-* sid) → always silent
+out=$(jq -nc '{session_id:"agent-deadbeef",tool_name:"Bash",tool_input:{command:"pueue add -- foo"}}' \
+       | bash ~/.claude/hooks/hint-skill-pueue.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-pueue silent for subagent" \
+  || { echo "FAIL: hint-skill-pueue should skip subagent: $out"; fail=1; }
+
+# 5. Skill-unlock: track-pueue-skill-load sets flag → hint hook allows
+hsp_sid2="hsp2-$$"
+rm -rf /tmp/claude-${UID}-state/pueue-skill-loaded /tmp/claude-${UID}-state/pueue-skill-hint
+jq -nc --arg s "$hsp_sid2" '{session_id:$s,tool_name:"Skill",tool_input:{skill:"pueue"}}' \
+  | bash ~/.claude/hooks/track-pueue-skill-load.sh
+out=$(jq -nc --arg s "$hsp_sid2" '{session_id:$s,tool_name:"Bash",tool_input:{command:"pueue status"}}' \
+       | bash ~/.claude/hooks/hint-skill-pueue.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-pueue allows after skill loaded" \
+  || { echo "FAIL: hint-skill-pueue should allow once skill loaded: $out"; fail=1; }
+
+# 6. track-pueue-skill-load ignores non-pueue skills
+hsp_sid3="hsp3-$$"
+rm -rf /tmp/claude-${UID}-state/pueue-skill-loaded /tmp/claude-${UID}-state/pueue-skill-hint
+jq -nc --arg s "$hsp_sid3" '{session_id:$s,tool_name:"Skill",tool_input:{skill:"jina-ai"}}' \
+  | bash ~/.claude/hooks/track-pueue-skill-load.sh
+[ ! -f "/tmp/claude-${UID}-state/pueue-skill-loaded/$hsp_sid3" ] \
+  && echo "OK:   track-pueue-skill-load ignores non-pueue skill" \
+  || { echo "FAIL: track-pueue-skill-load should not set flag for other skills"; fail=1; }
+
+# 7. Compact re-arm: deny → silent → compact-bump → deny again
+hsp_sid4="hsp4-$$"
+rm -rf /tmp/claude-${UID}-state/pueue-skill-loaded /tmp/claude-${UID}-state/pueue-skill-hint /tmp/claude-${UID}-state/compact-events
+out=$(jq -nc --arg s "$hsp_sid4" '{session_id:$s,tool_name:"Bash",tool_input:{command:"pueue add -- echo"}}' \
+       | bash ~/.claude/hooks/hint-skill-pueue.sh)
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > "$test_out" \
+  && echo "OK:   hint-skill-pueue first deny (compact-rearm setup)" \
+  || { echo "FAIL: hint-skill-pueue first deny for compact test: $out"; fail=1; }
+out=$(jq -nc --arg s "$hsp_sid4" '{session_id:$s,tool_name:"Bash",tool_input:{command:"pueue status"}}' \
+       | bash ~/.claude/hooks/hint-skill-pueue.sh)
+[ -z "$out" ] && echo "OK:   hint-skill-pueue silent before compact" \
+  || { echo "FAIL: hint-skill-pueue pre-compact silent: $out"; fail=1; }
+printf '{"session_id":"%s"}' "$hsp_sid4" | bash ~/.claude/hooks/compact-bump.sh
+out=$(jq -nc --arg s "$hsp_sid4" '{session_id:$s,tool_name:"Bash",tool_input:{command:"pueue add -- echo"}}' \
+       | bash ~/.claude/hooks/hint-skill-pueue.sh)
+echo "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > "$test_out" \
+  && echo "OK:   hint-skill-pueue re-denies after compact-bump" \
+  || { echo "FAIL: hint-skill-pueue should re-deny after compact: $out"; fail=1; }
+
+# 8. gen-seen sync: skill loaded after compact → pre-bash hook doesn't wipe flag
+hsp_sid5="hsp5-$$"
+rm -rf /tmp/claude-${UID}-state/pueue-skill-loaded /tmp/claude-${UID}-state/pueue-skill-hint /tmp/claude-${UID}-state/compact-events
+printf '{"session_id":"%s"}' "$hsp_sid5" | bash ~/.claude/hooks/compact-bump.sh
+jq -nc --arg s "$hsp_sid5" '{session_id:$s,tool_name:"Skill",tool_input:{skill:"pueue"}}' \
+  | bash ~/.claude/hooks/track-pueue-skill-load.sh
+out=$(jq -nc --arg s "$hsp_sid5" '{session_id:$s,tool_name:"Bash",tool_input:{command:"pueue status"}}' \
+       | bash ~/.claude/hooks/hint-skill-pueue.sh)
+[ -z "$out" ] \
+  && echo "OK:   hint-skill-pueue allows when skill loaded after compact" \
+  || { echo "FAIL: hint-skill-pueue should not wipe skill flag set post-compact: $out"; fail=1; }
+
+rm -rf /tmp/claude-${UID}-state/pueue-skill-loaded /tmp/claude-${UID}-state/pueue-skill-hint /tmp/claude-${UID}-state/compact-events
+
+# 9. Anchor forms: sudo, &&, bash -c wrapper → all deny
+hsp_sid6="hsp6-$$"
+rm -rf /tmp/claude-${UID}-state/pueue-skill-loaded /tmp/claude-${UID}-state/pueue-skill-hint
+for cmd in "sudo pueue status" "git status && pueue add -- foo" "bash -c 'pueue status'"; do
+  out=$(jq -nc --arg s "$hsp_sid6" --arg c "$cmd" '{session_id:$s,tool_name:"Bash",tool_input:{command:$c}}' \
+         | bash ~/.claude/hooks/hint-skill-pueue.sh)
+  echo "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > "$test_out" \
+    && echo "OK:   hint-skill-pueue denies anchor form: $cmd" \
+    || { echo "FAIL: hint-skill-pueue should deny anchor form [$cmd]: $out"; fail=1; }
+  rm -f "/tmp/claude-${UID}-state/pueue-skill-hint/$hsp_sid6"  # reset one-shot so next form triggers
+done
+rm -rf /tmp/claude-${UID}-state/pueue-skill-loaded /tmp/claude-${UID}-state/pueue-skill-hint /tmp/claude-${UID}-state/compact-events
 
 echo ""
 rm -f "$test_out"

@@ -7,7 +7,7 @@
 # Cooldown: time-based, per session_id. After an emit, suppress further
 # load warnings for SYSLOAD_COOLDOWN_SEC seconds regardless of how the
 # metrics shift. The cache file holds a single epoch timestamp at
-# /tmp/claude-system-load/<session_id>; on each invocation we exit silent
+# /tmp/claude-${UID}-state/system-load/<session_id>; on each invocation we exit silent
 # if (now - cached) < cooldown, otherwise emit and refresh the timestamp.
 #
 # Thresholds are env-overridable (also lets tests force trip/silent paths):
@@ -138,9 +138,9 @@ fi
 
 # --- Cooldown: time-based. Suppress repeat emits within COOLDOWN_SEC of the
 #     last one for this session, regardless of which metrics tripped. ---
-CACHE_DIR=/tmp/claude-system-load
+CACHE_DIR=/tmp/claude-${UID}-state/system-load
 CACHE_FILE="${CACHE_DIR}/${SID}"
-mkdir -p "$CACHE_DIR"
+mkdir -p -m 700 "$CACHE_DIR"
 NOW=$(date +%s)
 if [ -f "$CACHE_FILE" ]; then
   LAST=$(cat "$CACHE_FILE" 2>/dev/null || echo 0)

@@ -1,9 +1,6 @@
 ---
 name: audit-fresh-eye
-description: >
-  Fresh-eye review of edits made during a single conversation turn. Reads a
-  unified diff of user change, walks DOC and CODE checklists, returns
-  CLEAN or a tab-separated FIXES verdict. Read-only.
+description: Audit with a fresh eye.
 model: sonnet
 color: yellow
 permissionMode: dontAsk

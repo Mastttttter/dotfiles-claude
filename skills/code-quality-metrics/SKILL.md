@@ -2,6 +2,7 @@
 name: code-quality-metrics
 description: Measure code quality quantitatively — cyclomatic complexity, cognitive complexity, maintainability index. Use when evaluating whether code meets quality thresholds.
 version: 0.1.0
+disable-model-invocation: true
 ---
 
 # Code Quality Metrics Guide

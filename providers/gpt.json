@@ -1,14 +1,15 @@
 {
   "env": {
     "ANTHROPIC_API_KEY": "",
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8765",
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:48065",
     "API_TIMEOUT_MS": "3000000",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.3-codex",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-5.4",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "gpt-5.5",
     "ANTHROPIC_DEFAULT_MODEL": "gpt-5.4",
-    "CLAUDE_CODE_EFFORT_LEVEL": "xhigh"
+    "CLAUDE_CODE_EFFORT_LEVEL": "xhigh",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "400000"
   },
   "skipAutoPermissionPrompt": false,
   "voiceEnabled": false,

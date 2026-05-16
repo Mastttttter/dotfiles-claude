@@ -1,6 +1,6 @@
 ---
 name: ai-slop-review
-description: Internal engine for the /review skill. Do not invoke directly.
+description: Internal-use
 model: inherit
 color: yellow
 tools: ["Bash(git diff:*)", "Bash(git status:*)", "Bash(git log:*)", "Bash(git show:*)", "Read", "Grep", "Glob"]

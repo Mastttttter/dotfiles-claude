@@ -39,9 +39,15 @@
 # !/CLAUDE.md
 /claude-dm.log
 /audit-history
+/daemon.lock
+/daemon.log
+/daemon.status.json
+/daemon/
+/jobs/
 
 # machine specific settings
 /settings.local.json
+/settings.json.bak*
 
 # home project claude state files
 /worktrees
@@ -66,3 +72,6 @@ RTK.md
 .codex
 .claude-usage-cache.json
 .last-cleanup
+.caveman-active
+.caveman-history.jsonl
+.caveman-statusline-suffix
