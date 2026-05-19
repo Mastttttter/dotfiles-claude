@@ -6,7 +6,7 @@ CLI tools:
 
 - `rg` not `grep` · `fd` not `find` · `exa` not `ls` · `sd` not `sed`
 - `just` not `make` · `uv` not `pip` · `uv run` not `python3` · `pnpm` not `npm`
-- `sqlite3` · `gitleaks` · `hyperfine` · `rsync` · `gh`
+- `sqlite3` · `hyperfine` · `rsync` · `gh`
 
 Python: `uv`, `ruff`, `basedpyright`, run with `PYTHONUNBUFFERED=1 uv run` or `uv run python -u`.
 

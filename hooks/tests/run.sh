@@ -948,6 +948,49 @@ bash ~/.claude/hooks/recall-reminder-reset.sh <<< "$rrr_in"
 
 rm -f "$rrr_cache"
 
+# block-note-prompt: blocks /note prompts; saves text; lists on bare /note; silent otherwise.
+bn_sid="bn-$$"
+bn_notes="/tmp/claude-${UID}-state/notes/$bn_sid"
+rm -f "$bn_notes"
+
+# Non-/note prompt → silent.
+out=$(jq -nc --arg s "$bn_sid" --arg p "hello world" '{session_id:$s,prompt:$p}' \
+      | bash ~/.claude/hooks/block-note-prompt.sh)
+[ -z "$out" ] \
+  && echo "OK:   block-note-prompt silent on non-/note prompt" \
+  || { echo "FAIL: block-note-prompt should be silent: $out"; fail=1; }
+
+# /note <text> → block + save.
+out=$(jq -nc --arg s "$bn_sid" --arg p "/note buy milk" '{session_id:$s,prompt:$p}' \
+      | bash ~/.claude/hooks/block-note-prompt.sh)
+echo "$out" | jq -e '.decision == "block" and (.reason | contains("buy milk"))' > "$test_out" \
+  && echo "OK:   block-note-prompt blocks and echoes /note text" \
+  || { echo "FAIL: block-note-prompt save: $out"; fail=1; }
+
+# Second note → count increments.
+out=$(jq -nc --arg s "$bn_sid" --arg p "/note call dentist" '{session_id:$s,prompt:$p}' \
+      | bash ~/.claude/hooks/block-note-prompt.sh)
+echo "$out" | jq -e '.decision == "block" and (.reason | contains("#2"))' > "$test_out" \
+  && echo "OK:   block-note-prompt increments note count" \
+  || { echo "FAIL: block-note-prompt count: $out"; fail=1; }
+
+# Bare /note → list both notes.
+out=$(jq -nc --arg s "$bn_sid" --arg p "/note" '{session_id:$s,prompt:$p}' \
+      | bash ~/.claude/hooks/block-note-prompt.sh)
+echo "$out" | jq -e '.decision == "block" and (.reason | contains("buy milk")) and (.reason | contains("call dentist"))' > "$test_out" \
+  && echo "OK:   block-note-prompt lists saved notes on bare /note" \
+  || { echo "FAIL: block-note-prompt list: $out"; fail=1; }
+
+# Bare /note with no prior notes → "No notes yet".
+bn_empty_sid="bn-empty-$$"
+out=$(jq -nc --arg s "$bn_empty_sid" --arg p "/note" '{session_id:$s,prompt:$p}' \
+      | bash ~/.claude/hooks/block-note-prompt.sh)
+echo "$out" | jq -e '.decision == "block" and (.reason | contains("No notes"))' > "$test_out" \
+  && echo "OK:   block-note-prompt reports no notes on empty session" \
+  || { echo "FAIL: block-note-prompt empty list: $out"; fail=1; }
+
+rm -f "$bn_notes"
+
 echo ""
 echo "=== Skill-recall hint hooks ==="
 
