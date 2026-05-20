@@ -24,18 +24,34 @@ compatibilty: Claude Code
 
 - Non-interactive long-running tasks expected to run for >2 minutes
 - Compute-intensive tasks: per-task cgroup caps (mem ≤40%, cpu ≤90%) prevent runaway resource use
-- Tasks that must survive the Claude session: daemon runs detached under user systemd
+- Long-running tasks that must survive the Claude session: daemon runs detached under user systemd
 
 ## When NOT to Use
 
 - Short tasks (<2 minutes): run in Bash directly
-- Interactive commands: use `tmux` instead
+- Interactive commands: use `/tmux` instead
 - IO-bound polling loops: babysit's scheduler does not help
-- Tasks fine to die with Claude: use Bash `run_in_background: true`
+- Lightweight (low CPU + low memory) tasks fine to die with Claude: Bash `run_in_background: true`
+
+## Hard Guardrail — Don't Bypass
+
+`/babysit` is the cost guardrail for compute-intensive work on this host — not an optional tool. If a task is heavy (CPU-bound, memory-bound, multi-process), it MUST run under babysit so the cgroup caps and observability watchdog can stop runaway cost. Anti-patterns:
+
+- **Routing heavy work through built-in `run_in_background: true`** to dodge the queue → no one monitors footprint; the host can thrash and lock the user out of SSH.
+- **Inflating `--estimated_mem_bytes` / `--estimated_cpu_cores`** to pass the soft-deny gate while you don't actually need the headroom → starves other tasks and defeats fair-scheduling.
+- **Auto-backgrounded long Bash commands** (e.g. tools that fork into daemons): if they're heavy, `kill` and re-launch under `babysit run`.
+
+When your task hits the resource cap, the first reflex is NOT to raise the limit. It is to:
+
+1. Audit the script — profile, drop unused intermediates, rolling / partial read, subsampling, reduce space / time complexity, optimize nested loops, lower batch size / `n_jobs` / parallelism.
+2. Re-run footprint-optimized; confirm the demand is genuinely unavoidable.
+3. Only then raise estimates and `babysit wait_for_capacity` for moderation.
 
 ## Workflow
 
-Before launching heavy work, run the `/preflight-check` skill.
+### 0. Smoke test
+
+Before launching heavy work, smoke test on small scale for correctness (if appliable). Only proceed full-scale after the program is verified working.
 
 ### 1. Enqueue
 
@@ -48,11 +64,11 @@ babysit run \
   --estimated_cpu_cores=4
 ```
 
-> Provide best-effort estimates for time, peak memory, and peak CPU cores. You'll get a `runaway_risk` notification when any actual exceeds its estimate.
+> Provide best-effort estimates for time, peak memory, and peak CPU cores — by extrapolation of smoke test (if linear complexity appliable) plus prior live experience (if any). Never over-estimate without clue (starves other tasks). You'll get a `runaway_risk` notification when any actual exceeds its estimate. Pick estimation wisely.
 
 The call is non-blocking: returns immediately with `queued: <name>`. The daemon dispatches as soon as system has capacity.
 
-Required: `--name` (unique), `--command` (single shell string). Optional: `--estimated_time` (default 10m), `--kill_timeout` (default 2× estimated), `--observability_interval` (default 5m), `--mem_pct_limit` (default 40), `--cpu_pct_limit` (default 90), `--estimated_mem_bytes` (default `4G`), `--estimated_cpu_cores` (default `4`).
+Required: `--name` (unique), `--command` (single shell string). Optional: `--estimated_time` (default 10m), `--kill_timeout` (default 2× estimated), `--observability_interval` (default 5m), `--mem_pct_limit` (default 40), `--cpu_pct_limit` (default 90), `--estimated_mem_bytes` (default `4G`), `--estimated_cpu_cores` (default `4`), `--cwd` (default current shell cwd).
 
 > Override the defaults to match your workload — under system memory/CPU pressure the daemon kills estimate-exceeders before within-estimate tasks, so accurate predictions protect long-running work. Hard kill fires at 2× sustained (daemon, graceful) or 3× instant via cgroup OOM.
 >
@@ -64,7 +80,7 @@ Required: `--name` (unique), `--command` (single shell string). Optional: `--est
 babysit wait --name="<unique-name>"
 ```
 
-Run with `run_in_background: true` (optionally attach `Monitor` for line-level pushes). You get:
+Run with `run_in_background: true` and attach `Monitor` for runaway risk notifications. You get:
 
 - a mid-flight `{"event":"runaway_risk","dim":"elapsed|mem|cpu", ...}` JSON line on stderr the first time an actual exceeds its declared estimate (elapsed > `estimated_time`, mem > `estimated_mem_bytes`, or cpu_cores > `estimated_cpu_cores`) — inspect the log and decide whether to keep waiting or `babysit kill`. Daemon hard-kills for mem/cpu at 2× sustained for the monitor tolerance window; elapsed hard-kills at `--kill_timeout` (default 2× `estimated_time`).
 - a terminal-status JSON object on stdout plus a `<task-notification>` when the task reaches a terminal state (exit 0 only on `completed`; exit 1 for everything else — `failed`, `killed`, `unknown`). For a kill, `kill_reason` + `kill_hint` fields at the top of the JSON tell you what to fix.
@@ -81,7 +97,7 @@ babysit log --follow --name="<unique-name>"   # stream; use with run_in_backgrou
 ### 4. List / kill
 
 ```bash
-babysit list                           # all tasks, JSON
+babysit list                           # running/pending + terminal ended within 24h; --all for full history
 babysit status --name="<name>"         # one task, JSON
 babysit kill --name="<name>"           # SIGTERM, then scope-stop fallback
 ```

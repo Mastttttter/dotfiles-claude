@@ -41,6 +41,8 @@ babysit run --name="train-mlp" --command="uv run python -u train.py" --estimated
 
 > `--estimated_mem_bytes` accepts `4G`, `512M`, `1.5T`, raw bytes (default `4G`). `--estimated_cpu_cores` is a float (default `4`). Override explicitly for heavy ML training, big-data scans, or single-threaded scripts — the defaults are tuned for a typical 10m task.
 >
+> `--cwd` (existing absolute path; default current shell cwd) is the task's working directory, shown as `PROJECT` in `babysit list` / `tui`.
+>
 > Soft warn at 1× (a `{"event":"runaway_risk","dim":"mem|cpu", ...}` line on `babysit wait` stderr — sanity-check on the fly). Hard kill at 2× sustained for the monitor tolerance window (default 30s) with `kill_reason="estimated_mem_exceeded"` / `"estimated_cpu_exceeded"`.
 >
 > Under system pressure (memory/CPU), the daemon picks the kill victim by tier: (1) tasks exceeding their declared estimate first, (2) tasks with no declared estimate, (3) tasks within their estimate last. This protects sunk progress of well-behaved long-running tasks against runaway newcomers. The killed task's spawning agent reads `kill_reason="system_{mem,cpu}_pressure"` and should wait for system load to drop before retrying (use `babysit wait_for_capacity`).
@@ -58,9 +60,11 @@ babysit daemon-start --max_sys_mem_pct=70 --max_sys_disk_pct=90 --max_sys_cpu_pc
 
 To show current tasks:
 ```bash
-babysit list
-# equivalant to:
-babysit list --columns="name,pid,status,kill_reason,kill_hint,exit_code,command,elapsed_time,estimated_time,kill_timeout,observability_interval,last_observed_log,time_since_last_observe,cpu_cores,cpu_pct,estimated_cpu_cores,mem_bytes,mem_pct,estimated_mem_bytes,disk_write_bytes,disk_read_bytes,num_procs,num_threads,claude_session_id" --format=json
+babysit list                              # default: running/pending + terminal ended within 24h
+babysit list --since=7d                   # broaden the terminal window
+babysit list --all                        # full history (every row)
+# default expands to:
+babysit list --columns="name,pid,status,kill_reason,kill_hint,exit_code,command,elapsed_time,estimated_time,kill_timeout,observability_interval,last_observed_log,time_since_last_observe,cpu_cores,cpu_pct,estimated_cpu_cores,mem_bytes,mem_pct,estimated_mem_bytes,disk_write_bytes,disk_read_bytes,num_procs,num_threads,cwd,claude_session_id" --format=json --since=24h
 ```
 
 > `status` can be: pending, running, completed, failed, killed, unknown
@@ -105,6 +109,17 @@ you will be notified on log update.
 
 
 For humans only (do not invoke from an agent), there is a `babysit tui` dashboard built on `textual` that renders the task list with live progress, sortable resource columns, log peek, and confirm-to-kill. Agent-facing subcommands above remain the API surface.
+
+
+To purge stale finished tasks and their logs:
+
+```bash
+babysit clean                                        # purge all terminal rows immediately + their log files
+babysit clean --older_than=24h                       # only rows whose ended_at is >24h ago
+babysit clean --status=killed,failed --dry_run       # preview without deleting
+```
+
+> The daemon also auto-purges terminal rows past `--cleanup_ttl` (default `7d`) once per minute on its tick loop, unlinking the corresponding `log_path` file. Override with `babysit daemon-start --cleanup_ttl=30d` etc.
 
 
 Use `babysit --help` or `babysit <subcommand> --help` for help.

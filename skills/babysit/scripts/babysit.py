@@ -68,6 +68,7 @@ DEFAULTS = {
     "monitor_interval": "10s",
     "monitor_tolerance_count": 3,
     "monitor_disk_infer_by_dir": str(Path.home()),
+    "cleanup_ttl": "7d",
 }
 
 STATUSES = ("pending", "running", "completed", "failed", "killed", "unknown")
@@ -81,6 +82,7 @@ SPEC_COLUMNS = (
     "mem_bytes", "mem_pct", "estimated_mem_bytes",
     "disk_write_bytes", "disk_read_bytes",
     "num_procs", "num_threads",
+    "cwd",
     "claude_session_id",
 )
 
@@ -199,6 +201,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     exit_code INTEGER,
     kill_reason TEXT,
     log_path TEXT NOT NULL,
+    cwd TEXT,
     claude_session_id TEXT
 );
 
@@ -244,6 +247,7 @@ def spawn_under_scope(
     log_path: Path,
     estimated_mem_bytes: int | None = None,
     estimated_cpu_cores: float | None = None,
+    cwd: str | None = None,
 ) -> tuple[subprocess.Popen, str]:
     """Spawn `command` inside a transient systemd --user scope (cgroup v2).
 
@@ -289,6 +293,7 @@ def spawn_under_scope(
         start_new_session=True,
         env=_systemd_env(),
         close_fds=True,
+        cwd=cwd,
         preexec_fn=lambda: os.nice(10),  # demote task vs monitor
     )
     fp.close()  # child holds the FD now
@@ -547,6 +552,7 @@ class Daemon:
         monitor_interval: float,
         monitor_tolerance_count: int,
         monitor_disk_infer_by_dir: str,
+        cleanup_ttl: float,
     ) -> None:
         self.max_sys_mem_pct = max_sys_mem_pct
         self.max_sys_disk_pct = max_sys_disk_pct
@@ -554,6 +560,8 @@ class Daemon:
         self.monitor_interval = monitor_interval
         self.monitor_tolerance_count = monitor_tolerance_count
         self.disk_dir = monitor_disk_infer_by_dir
+        self.cleanup_ttl = cleanup_ttl
+        self._last_cleanup_at = 0.0
 
         self.db = open_db()
         self.running: dict[str, RunningTask] = {}
@@ -582,6 +590,7 @@ class Daemon:
             "monitor_interval": monitor_interval,
             "monitor_tolerance_count": monitor_tolerance_count,
             "monitor_disk_infer_by_dir": monitor_disk_infer_by_dir,
+            "cleanup_ttl": cleanup_ttl,
         }.items():
             self.db.execute(
                 "INSERT OR REPLACE INTO daemon_config(key,value) VALUES(?,?)",
@@ -695,6 +704,10 @@ class Daemon:
     def _op_run(self, req: dict) -> dict:
         name = req["name"]
         command = req["command"]
+        cwd = req.get("cwd")
+        if cwd is not None:
+            if not cwd or not cwd.strip() or not Path(cwd).is_absolute() or not Path(cwd).is_dir():
+                return {"ok": False, "error": f"cwd {cwd!r} must be an existing absolute directory"}
         existing = self.db.execute(
             "SELECT status FROM tasks WHERE name=?", (name,)
         ).fetchone()
@@ -722,8 +735,8 @@ class Daemon:
             "INSERT INTO tasks(name,command,status,estimated_time,kill_timeout,"
             "observability_interval,mem_pct_limit,cpu_pct_limit,"
             "estimated_mem_bytes,estimated_cpu_cores,"
-            "created_at,log_path,claude_session_id) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "created_at,log_path,cwd,claude_session_id) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 name,
                 command,
@@ -737,6 +750,7 @@ class Daemon:
                 req.get("estimated_cpu_cores"),
                 now(),
                 str(log_path),
+                req.get("cwd"),
                 req.get("claude_session_id"),
             ),
         )
@@ -772,6 +786,55 @@ class Daemon:
 
     def _op_ping(self, req: dict) -> dict:
         return {"ok": True, "pid": os.getpid(), "running": len(self.running)}
+
+    def _op_clean(self, req: dict) -> dict:
+        ot = req.get("older_than")
+        older_than = float(ot) if ot is not None else self.cleanup_ttl
+        statuses_req = req.get("statuses") or []
+        statuses = tuple(s for s in statuses_req if s in TERMINAL) or tuple(TERMINAL)
+        dry_run = bool(req.get("dry_run"))
+        cleaned, log_failed = self._clean_terminal(older_than, statuses, dry_run)
+        return {
+            "ok": True,
+            "cleaned": cleaned,
+            "log_unlink_failed": log_failed,
+            "dry_run": dry_run,
+            "older_than": older_than,
+            "statuses": list(statuses),
+        }
+
+    # ── cleanup of terminal rows + log files ───────────────────────────────
+    def _clean_terminal(
+        self, older_than: float, statuses: tuple[str, ...], dry_run: bool
+    ) -> tuple[list[dict], list[str]]:
+        cutoff = now() - older_than
+        placeholders = ",".join("?" for _ in statuses)
+        rows = self.db.execute(
+            f"SELECT name, log_path, status, ended_at FROM tasks "
+            f"WHERE status IN ({placeholders}) AND ended_at IS NOT NULL "
+            f"AND ended_at < ?",
+            (*statuses, cutoff),
+        ).fetchall()
+        cleaned: list[dict] = []
+        log_failed: list[str] = []
+        for r in rows:
+            entry = {
+                "name": r["name"],
+                "status": r["status"],
+                "ended_at": r["ended_at"],
+                "log_path": r["log_path"],
+            }
+            if not dry_run:
+                if r["log_path"]:
+                    try:
+                        Path(r["log_path"]).unlink()
+                    except FileNotFoundError:
+                        pass
+                    except OSError:
+                        log_failed.append(r["log_path"])
+                self.db.execute("DELETE FROM tasks WHERE name=?", (r["name"],))
+            cleaned.append(entry)
+        return cleaned, log_failed
 
     def _op_wait_for_capacity(self, req: dict) -> dict:
         em = int(req.get("mem_bytes") or 0)
@@ -911,7 +974,20 @@ class Daemon:
         if not self.shutting_down and not any(dim_violated.values()):
             self._schedule_pending()
 
-        # 4. heartbeat
+        # 4. auto-cleanup of stale terminal rows + log files (≤ 1× / minute)
+        if now() - self._last_cleanup_at >= 60:
+            cleaned, log_failed = self._clean_terminal(
+                self.cleanup_ttl, tuple(TERMINAL), dry_run=False
+            )
+            self._last_cleanup_at = now()
+            if cleaned:
+                self.log(
+                    f"cleanup: removed {len(cleaned)} terminal rows older than "
+                    f"{fmt_duration(self.cleanup_ttl)}"
+                    + (f", {len(log_failed)} log unlink failures" if log_failed else "")
+                )
+
+        # 5. heartbeat
         if int(now()) % 60 < self.monitor_interval:
             self.log(
                 f"tick: running={len(self.running)} "
@@ -1081,6 +1157,7 @@ class Daemon:
                 log_path=log_path,
                 estimated_mem_bytes=r["estimated_mem_bytes"],
                 estimated_cpu_cores=r["estimated_cpu_cores"],
+                cwd=r["cwd"],
             )
         except Exception as e:  # noqa: BLE001
             self.log(f"[{name}] spawn failed: {e}")
@@ -1255,6 +1332,7 @@ def cmd_daemon_start(
     monitor_interval: str = typer.Option(DEFAULTS["monitor_interval"], "--monitor_interval"),
     monitor_tolerance_count: int = typer.Option(DEFAULTS["monitor_tolerance_count"], "--monitor_tolerance_count"),
     monitor_disk_infer_by_dir: str = typer.Option(DEFAULTS["monitor_disk_infer_by_dir"], "--monitor_disk_infer_by_dir"),
+    cleanup_ttl: str = typer.Option(DEFAULTS["cleanup_ttl"], "--cleanup_ttl", help="Terminal-task rows + their log files are auto-deleted after this age. Default 7d."),
     foreground: bool = typer.Option(False, "--foreground", "-f", help="Run in foreground (no detach)."),
 ) -> None:
     """Start the babysit daemon (idempotent — exits 0 if already running)."""
@@ -1276,6 +1354,7 @@ def cmd_daemon_start(
             monitor_interval=parse_duration(monitor_interval),
             monitor_tolerance_count=monitor_tolerance_count,
             monitor_disk_infer_by_dir=monitor_disk_infer_by_dir,
+            cleanup_ttl=parse_duration(cleanup_ttl),
         )
         d.run_forever()
     finally:
@@ -1329,6 +1408,10 @@ def cmd_run(
         False, "--force",
         help="Skip the capacity soft-deny gate. Use only when you've verified the system can absorb the load (e.g. you're replacing a just-killed task).",
     ),
+    cwd: str | None = typer.Option(
+        None, "--cwd",
+        help="Existing absolute directory to run the task in (default: current shell cwd).",
+    ),
 ) -> None:
     """Enqueue a task. Returns immediately (non-blocking).
 
@@ -1354,6 +1437,7 @@ def cmd_run(
             estimated_mem_bytes=em,
             estimated_cpu_cores=estimated_cpu_cores,
             force=force,
+            cwd=cwd or os.getcwd(),
             claude_session_id=os.environ.get("CLAUDE_CODE_SESSION_ID"),
         )
     except RPCError as e:
@@ -1375,10 +1459,22 @@ def _split_cols(s: str) -> list[str]:
 def cmd_list(
     columns: str = typer.Option(_DEFAULT_COLS, "--columns", help="Comma-separated columns."),
     format: str = typer.Option("json", "--format", help="json|table"),
+    since: str = typer.Option("24h", "--since", help="Hide terminal tasks ended longer ago than this. Running/pending tasks are always shown."),
+    show_all: bool = typer.Option(False, "--all", help="Show every task in the DB (overrides --since)."),
 ) -> None:
-    """List all tasks."""
+    """List tasks. By default shows running/pending plus terminal tasks whose
+    `ended_at` is within --since (default 24h). Use --all for full history.
+    """
     resp = rpc_call("list")
-    _print(resp["tasks"], format, columns=_split_cols(columns))
+    tasks = resp["tasks"]
+    if not show_all:
+        cutoff = now() - parse_duration(since)
+        tasks = [
+            t for t in tasks
+            if t["status"] not in TERMINAL
+            or (t.get("ended_at") is not None and t["ended_at"] >= cutoff)
+        ]
+    _print(tasks, format, columns=_split_cols(columns))
 
 
 @app.command("status")
@@ -1571,6 +1667,45 @@ def cmd_log(
         sys.stdout.write("\n")
 
 
+@app.command("clean")
+def cmd_clean(
+    older_than: str = typer.Option(
+        "0s", "--older_than",
+        help="Only purge terminal-status rows older than this. Default 0s (purge all terminals).",
+    ),
+    status: str = typer.Option(
+        ",".join(sorted(TERMINAL)), "--status",
+        help="Comma-separated terminal statuses to purge (subset of completed/failed/killed/unknown).",
+    ),
+    dry_run: bool = typer.Option(False, "--dry_run", help="Show what would be purged, don't delete."),
+    format: str = typer.Option("json", "--format", help="json|table"),
+) -> None:
+    """Purge stale terminal-status tasks and their log files.
+
+    The daemon also auto-purges terminal rows past `--cleanup_ttl` (default 7d)
+    on its tick loop. Use this verb for explicit immediate cleanup.
+    """
+    statuses = [s.strip() for s in status.split(",") if s.strip()]
+    invalid = [s for s in statuses if s not in TERMINAL]
+    if invalid:
+        raise typer.BadParameter(
+            f"non-terminal status(es): {invalid}. Allowed: {sorted(TERMINAL)}"
+        )
+    resp = rpc_call(
+        "clean",
+        older_than=parse_duration(older_than),
+        statuses=statuses,
+        dry_run=dry_run,
+    )
+    out = {
+        "dry_run": resp["dry_run"],
+        "count": len(resp["cleaned"]),
+        "log_unlink_failed": resp["log_unlink_failed"],
+        "cleaned": resp["cleaned"],
+    }
+    _print(out, format)
+
+
 @app.command("ping")
 def cmd_ping() -> None:
     """Check daemon liveness."""
@@ -1590,7 +1725,7 @@ def cmd_tui(
     """Interactive dashboard for humans. Other subcommands are for agents.
 
     Keys: ↑/↓ navigate · Enter open log · k kill · s sort · f filter · r refresh · q quit
-    Sorts cycle: cpu → mem → elapsed → silent → name. Running tasks float to top.
+    Sorts cycle: started → cpu → mem → elapsed → silent → name. Running tasks float to top.
     """
     if not daemon_alive():
         typer.echo("babysit daemon not running. Start with: babysit daemon-start", err=True)
@@ -1604,6 +1739,7 @@ def cmd_tui(
     from textual.widgets import DataTable, Footer, Label, RichLog, Static
 
     SORT_KEYS: list[tuple[str, Any]] = [
+        ("started", lambda r: -(r.get("started_at") or r.get("created_at") or 0)),
         ("cpu", lambda r: -(r.get("cpu_cores") or 0)),
         ("mem", lambda r: -(r.get("mem_bytes") or 0)),
         ("elapsed", lambda r: -(r.get("elapsed_time") or 0)),
@@ -1611,6 +1747,10 @@ def cmd_tui(
         ("name", lambda r: r.get("name") or ""),
     ]
     FILTERS: list[tuple[str, Any]] = [
+        ("recent (24h)", lambda r: (
+            r["status"] not in TERMINAL
+            or (r.get("ended_at") is not None and r["ended_at"] >= now() - 86400)
+        )),
         ("running", lambda r: r["status"] == "running"),
         ("all", lambda r: True),
         ("terminal", lambda r: r["status"] in TERMINAL),
@@ -1761,7 +1901,7 @@ def cmd_tui(
             yield Label(self._header_text(), id="header")
             self._table = DataTable(cursor_type="row", zebra_stripes=True)
             self._table.add_columns(
-                "NAME", "STATUS", "ELAPSED / ETA", "CPU", "MEM", "SILENT", "LAST LINE"
+                "NAME", "PROJECT", "STATUS", "ELAPSED / ETA", "CPU", "MEM", "SILENT", "LAST LINE"
             )
             yield self._table
             self._log_pane = Static("", id="log-pane", markup=True)
@@ -1821,8 +1961,10 @@ def cmd_tui(
                 else:
                     silent_cell = fmt_duration(silent_secs)
                 last = last_log_line(Path(r["log_path"])) if r.get("log_path") else ""
+                project = Path(r["cwd"]).name if r.get("cwd") else "-"
                 self._table.add_row(
                     r["name"],
+                    project,
                     status_cell,
                     progress_bar(r.get("elapsed_time"), r.get("estimated_time"), r.get("kill_timeout")),
                     cpu,
