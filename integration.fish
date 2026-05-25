@@ -1,3 +1,7 @@
+if not contains $HOME/.claude/bin $PATH
+    set -gx PATH $HOME/.claude/bin $PATH
+end
+
 function claude
     set -lx SHELL (command -v bash)
     set -lx PYTHONUNBUFFERED 1

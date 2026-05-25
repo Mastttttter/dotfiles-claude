@@ -739,6 +739,47 @@ assert_silent cache-keepalive-hint '{"tool_name":"Bash","tool_input":{"command":
 # Subagent session_id (agent-* prefix): silent even on backgrounded Bash.
 assert_silent cache-keepalive-hint '{"session_id":"agent-deadbeef1234","tool_name":"Bash","tool_input":{"run_in_background":true,"command":"sleep 60"}}'
 
+# show-image-after-send: write a plain file:// URL to a per-session state file
+# after SendUserFile (read by the Claude Code statusline renderer). Host comes
+# from SSH_CONNECTION when set (file://user@ip/path) and is omitted otherwise
+# (file:///path). Always silent on hook stdout (URL goes to disk, not Claude's
+# context).
+assert_silent show-image-after-send '{"tool_name":"Bash","tool_input":{"command":"ls"}}'
+assert_silent show-image-after-send '{"tool_name":"SendUserFile","tool_input":{"files":[],"status":"normal"}}'
+assert_silent show-image-after-send '{"tool_name":"SendUserFile","tool_input":{"files":["/tmp/notes.txt"],"status":"normal"}}'
+assert_silent show-image-after-send '{"tool_name":"SendUserFile","tool_input":{"files":["/tmp/does-not-exist.png"],"status":"normal"}}'
+
+# show-image-after-send: with a real file + session_id, state file is written
+# containing the URL. Probe by creating a temp file and asserting state contents.
+_sis_tmp=$(mktemp --suffix=.png)
+_sis_sid="sis-test-$$"
+_sis_state="/tmp/claude-${UID}-state/last-file-url/${_sis_sid}"
+rm -f "$_sis_state"
+# Localhost case: no SSH_CONNECTION → hostless file:///path
+env -u SSH_CONNECTION bash ~/.claude/hooks/show-image-after-send.sh <<< \
+  "{\"session_id\":\"${_sis_sid}\",\"tool_name\":\"SendUserFile\",\"tool_input\":{\"files\":[\"${_sis_tmp}\"],\"status\":\"normal\"}}" \
+  >/dev/null 2>&1
+if [ -f "$_sis_state" ] && [ "$(cat "$_sis_state")" = "file://${_sis_tmp}" ]; then
+  echo "OK:   show-image-after-send state file localhost ($_sis_state)"
+else
+  echo "FAIL: show-image-after-send localhost did not write expected hostless URL"
+  echo "  got: $(cat "$_sis_state" 2>&1)"
+  fail=1
+fi
+# SSH case: SSH_CONNECTION set → file://user@ip/path
+rm -f "$_sis_state"
+SSH_CONNECTION="10.0.0.1 5000 10.0.0.2 22" bash ~/.claude/hooks/show-image-after-send.sh <<< \
+  "{\"session_id\":\"${_sis_sid}\",\"tool_name\":\"SendUserFile\",\"tool_input\":{\"files\":[\"${_sis_tmp}\"],\"status\":\"normal\"}}" \
+  >/dev/null 2>&1
+if [ -f "$_sis_state" ] && [ "$(cat "$_sis_state")" = "file://$(whoami)@10.0.0.2${_sis_tmp}" ]; then
+  echo "OK:   show-image-after-send state file ssh"
+else
+  echo "FAIL: show-image-after-send ssh did not write expected user@ip URL"
+  echo "  got: $(cat "$_sis_state" 2>&1)"
+  fail=1
+fi
+rm -f "$_sis_state" "$_sis_tmp"
+
 # prefer-uv-run: fires on bare python3; silent when uv run is already used
 assert_context prefer-uv-run '{"tool_input":{"command":"python3 foo.py"}}' "uv run python"
 assert_silent prefer-uv-run '{"tool_input":{"command":"uv run python foo.py"}}'

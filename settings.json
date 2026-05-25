@@ -383,6 +383,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "SendUserFile",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/show-image-after-send.sh",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [

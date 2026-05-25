@@ -881,10 +881,18 @@ class Daemon:
         already in `current_sys_used`; pending tasks haven't started yet so
         they're added explicitly; the 2× factor reserves burst headroom that
         matches the daemon's 2× sustained soft-kill threshold.
+
+        Memory is measured as `total - MemAvailable` rather than `vm.used`.
+        `vm.used` counts buff/cache as used; on hosts with stale page cache
+        (large parquet/dataset reads in prior sessions) it over-rejects
+        because the kernel can readily reclaim that cache without thrashing.
+        `MemAvailable` already discounts the non-reclaimable shmem / dirty
+        portions and reserves min_free_kbytes for the safety margin -- it's
+        the right "effective used" metric for admission control.
         """
         vm = psutil.virtual_memory()
         total_mem = vm.total
-        cur_mem_used = vm.used
+        cur_mem_used = total_mem - vm.available
         n_cores = float(os.cpu_count() or 1)
         cur_cpu_cores = psutil.cpu_percent(interval=None) * n_cores / 100.0
 
