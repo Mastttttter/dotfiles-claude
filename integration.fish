@@ -25,6 +25,10 @@ function haiku
     claude --model haiku $argv
 end
 
+function fuck
+    claude $history[1] $argv
+end
+
 function commit
     set -l extra ""
     if set -q argv[1]

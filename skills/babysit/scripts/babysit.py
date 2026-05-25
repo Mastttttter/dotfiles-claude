@@ -75,7 +75,7 @@ DEFAULTS = {
     "estimated_cpu_cores": _host_default_cores(),
     "max_sys_mem_pct": 70.0,
     "max_sys_disk_pct": 90.0,
-    "max_sys_cpu_pct": 90.0,
+    "max_babysit_cpu_pct": 90.0,
     "monitor_interval": "10s",
     "monitor_tolerance_count": 3,
     "monitor_disk_infer_by_dir": str(Path.home()),
@@ -100,7 +100,6 @@ SPEC_COLUMNS = (
 # Agent-facing remediation hints. Keys must match every `kill_reason` string
 # the daemon writes (see `_kill_task`, `_check_task`, `_adopt_running`, `_start_task`).
 KILL_HINTS: dict[str, str] = {
-    "system_cpu_pressure": "system CPU >90% sustained — limit num_threads / parallelism, or defer until load drops",
     "system_mem_pressure": "system memory >70% sustained — reduce batch size or wait for free RAM",
     "system_disk_pressure": "system disk >90% sustained — clean outputs or write elsewhere",
     "mem_exceeded": "task RSS exceeded --mem_pct_limit (default 40% of total RAM) — reduce batch size or pass a higher --mem_pct_limit",
@@ -289,6 +288,7 @@ def spawn_under_scope(
         "systemd-run", "--user", "--scope", "--quiet", "--collect",
         f"--unit={scope_unit}",
         f"--property=MemoryMax={mem_bytes}",
+        "--property=MemorySwapMax=0",
         f"--property=CPUQuota={cpu_quota}%",
         "--",
         "bash", "-c", command,
@@ -559,7 +559,7 @@ class Daemon:
         self,
         max_sys_mem_pct: float,
         max_sys_disk_pct: float,
-        max_sys_cpu_pct: float,
+        max_babysit_cpu_pct: float,
         monitor_interval: float,
         monitor_tolerance_count: int,
         monitor_disk_infer_by_dir: str,
@@ -567,7 +567,7 @@ class Daemon:
     ) -> None:
         self.max_sys_mem_pct = max_sys_mem_pct
         self.max_sys_disk_pct = max_sys_disk_pct
-        self.max_sys_cpu_pct = max_sys_cpu_pct
+        self.max_babysit_cpu_pct = max_babysit_cpu_pct
         self.monitor_interval = monitor_interval
         self.monitor_tolerance_count = monitor_tolerance_count
         self.disk_dir = monitor_disk_infer_by_dir
@@ -576,7 +576,7 @@ class Daemon:
 
         self.db = open_db()
         self.running: dict[str, RunningTask] = {}
-        self.sys_pressure: dict[str, int] = {"mem": 0, "cpu": 0, "disk": 0}
+        self.sys_pressure: dict[str, int] = {"mem": 0, "disk": 0}
         self.shutting_down = False
 
         # Adopt any tasks left running by a prior daemon (PID-reuse guarded)
@@ -597,7 +597,7 @@ class Daemon:
         for k, v in {
             "max_sys_mem_pct": max_sys_mem_pct,
             "max_sys_disk_pct": max_sys_disk_pct,
-            "max_sys_cpu_pct": max_sys_cpu_pct,
+            "max_babysit_cpu_pct": max_babysit_cpu_pct,
             "monitor_interval": monitor_interval,
             "monitor_tolerance_count": monitor_tolerance_count,
             "monitor_disk_infer_by_dir": monitor_disk_infer_by_dir,
@@ -785,7 +785,6 @@ class Daemon:
         if not self.shutting_down:
             s = probe_system(self.disk_dir)
             if not (s.mem_pct > self.max_sys_mem_pct
-                    or s.cpu_pct > self.max_sys_cpu_pct
                     or s.disk_pct > self.max_sys_disk_pct):
                 self._schedule_pending()
         return {"ok": True, "name": name}
@@ -873,14 +872,17 @@ class Daemon:
 
     # ── capacity gate (soft-deny) ──────────────────────────────────────────
     def _capacity_check(self, new_mem_bytes: int, new_cpu_cores: float) -> dict | None:
-        """Return None if a task with the given estimates fits under
-        max_sys_*_pct headroom, else a structured `capacity_exceeded` dict.
+        """Return None if a task with the given estimates fits under headroom,
+        else a structured `capacity_exceeded` dict.
 
-        Formula (per dim): current_sys_used + sum_of_pending_estimates +
-        2 × new_estimate ≤ max_sys_*_pct × total. Running babysit tasks are
-        already in `current_sys_used`; pending tasks haven't started yet so
-        they're added explicitly; the 2× factor reserves burst headroom that
-        matches the daemon's 2× sustained soft-kill threshold.
+        Memory (counts external use — RAM exhaustion is catastrophic):
+          (total_ram - MemAvailable) + sum_of_pending_estimates +
+          2 × new_estimate ≤ max_sys_mem_pct × total_ram
+
+        CPU (only babysit's own tasks counted — external processes outside
+        babysit's control can't block admission):
+          sum_of_running_babysit_cores + sum_of_pending_estimates +
+          2 × new_estimate ≤ max_babysit_cpu_pct × total_cores
 
         Memory is measured as `total - MemAvailable` rather than `vm.used`.
         `vm.used` counts buff/cache as used; on hosts with stale page cache
@@ -894,7 +896,6 @@ class Daemon:
         total_mem = vm.total
         cur_mem_used = total_mem - vm.available
         n_cores = float(os.cpu_count() or 1)
-        cur_cpu_cores = psutil.cpu_percent(interval=None) * n_cores / 100.0
 
         rows = self.db.execute(
             "SELECT estimated_mem_bytes, estimated_cpu_cores "
@@ -902,11 +903,15 @@ class Daemon:
         ).fetchall()
         pending_mem = sum((r["estimated_mem_bytes"] or 0) for r in rows)
         pending_cpu = sum((r["estimated_cpu_cores"] or 0.0) for r in rows)
+        running_cpu = sum(
+            (rt.last_stats.cpu_cores if rt.last_stats else (rt.estimated_cpu_cores or 0.0))
+            for rt in self.running.values()
+        )
 
         mem_limit = self.max_sys_mem_pct / 100 * total_mem
-        cpu_limit = self.max_sys_cpu_pct / 100 * n_cores
+        cpu_limit = self.max_babysit_cpu_pct / 100 * n_cores
         mem_projected = cur_mem_used + pending_mem + 2 * new_mem_bytes
-        cpu_projected = cur_cpu_cores + pending_cpu + 2 * new_cpu_cores
+        cpu_projected = running_cpu + pending_cpu + 2 * new_cpu_cores
 
         suggest = (
             f"babysit wait_for_capacity --mem_bytes={new_mem_bytes} "
@@ -935,14 +940,14 @@ class Daemon:
                 "dim": "cpu",
                 "projected_cores": cpu_projected,
                 "limit_cores": cpu_limit,
-                "current_sys_cores": cur_cpu_cores,
+                "current_babysit_cores": running_cpu,
                 "pending_estimates_cores": pending_cpu,
                 "your_estimate_cores": new_cpu_cores,
                 "hint": (
-                    f"projected cpu {cpu_projected:.1f}c exceeds "
-                    f"{self.max_sys_cpu_pct:.0f}% of system cores "
-                    f"({cpu_limit:.1f}c). Wait for capacity, reduce "
-                    f"--estimated_cpu_cores, or pass --force."
+                    f"projected babysit cpu {cpu_projected:.1f}c exceeds "
+                    f"{self.max_babysit_cpu_pct:.0f}% of system cores "
+                    f"({cpu_limit:.1f}c). Wait for running babysit tasks "
+                    f"to finish, reduce --estimated_cpu_cores, or pass --force."
                 ),
                 "suggested_command": suggest,
             }
@@ -994,12 +999,11 @@ class Daemon:
         sys_stats = probe_system(self.disk_dir)
         dim_violated = {
             "mem": sys_stats.mem_pct > self.max_sys_mem_pct,
-            "cpu": sys_stats.cpu_pct > self.max_sys_cpu_pct,
             "disk": sys_stats.disk_pct > self.max_sys_disk_pct,
         }
         for dim, v in dim_violated.items():
             self.sys_pressure[dim] = self.sys_pressure[dim] + 1 if v else 0
-        for dim in ("disk", "cpu", "mem"):  # disk > cpu > mem priority
+        for dim in ("disk", "mem"):  # disk > mem priority
             if self.sys_pressure[dim] >= self.monitor_tolerance_count:
                 self._enforce_system_dim(dim, sys_stats)
                 self.sys_pressure[dim] = 0
@@ -1136,18 +1140,16 @@ class Daemon:
     def _enforce_system_dim(self, dim: str, sys_stats: SysStats) -> None:
         if not self.running:
             return
-        cur = {"mem": sys_stats.mem_pct, "cpu": sys_stats.cpu_pct, "disk": sys_stats.disk_pct}[dim]
+        cur = {"mem": sys_stats.mem_pct, "disk": sys_stats.disk_pct}[dim]
 
         def abs_use(rt: RunningTask) -> float:
             if rt.last_stats is None:
                 return 0.0
             if dim == "disk":
                 return rt.last_stats.disk_write_bytes
-            if dim == "cpu":
-                return rt.last_stats.cpu_cores
             return rt.last_stats.mem_bytes
 
-        # ── external-cause shortcut (mem/cpu only) ────────────────────────
+        # ── external-cause shortcut (mem only) ────────────────────────────
         # Babysit can only kill its own managed tasks. If the *sum* of all
         # managed tasks' usage is smaller than the excess over threshold,
         # the pressure is driven by an external (non-babysit) process —
@@ -1158,14 +1160,10 @@ class Daemon:
         # re-check; if the external process eventually finishes, pressure
         # clears on its own. (Disk: no external-cause shortcut — every
         # writer shares the same pool and we can't distinguish.)
-        if dim in ("mem", "cpu"):
+        if dim == "mem":
             total_managed = sum(abs_use(rt) for rt in self.running.values())
-            if dim == "mem":
-                total_resource = float(psutil.virtual_memory().total)
-                limit_pct = self.max_sys_mem_pct
-            else:
-                total_resource = float(os.cpu_count() or 1)
-                limit_pct = self.max_sys_cpu_pct
+            total_resource = float(psutil.virtual_memory().total)
+            limit_pct = self.max_sys_mem_pct
             excess_abs = max(0.0, (cur - limit_pct) / 100.0 * total_resource)
             if excess_abs > 0 and total_managed < excess_abs:
                 self.log(
@@ -1184,10 +1182,7 @@ class Daemon:
         def tier_of(rt: RunningTask) -> int:
             if dim == "disk" or rt.last_stats is None:
                 return 1
-            if dim == "mem":
-                est, use = rt.estimated_mem_bytes, rt.last_stats.mem_bytes
-            else:  # cpu
-                est, use = rt.estimated_cpu_cores, rt.last_stats.cpu_cores
+            est, use = rt.estimated_mem_bytes, rt.last_stats.mem_bytes
             if est is None:
                 return 1
             return 0 if use > est else 2
@@ -1392,7 +1387,7 @@ def _fmt_cell(col: str, v: Any) -> str:
 def cmd_daemon_start(
     max_sys_mem_pct: float = typer.Option(DEFAULTS["max_sys_mem_pct"], "--max_sys_mem_pct"),
     max_sys_disk_pct: float = typer.Option(DEFAULTS["max_sys_disk_pct"], "--max_sys_disk_pct"),
-    max_sys_cpu_pct: float = typer.Option(DEFAULTS["max_sys_cpu_pct"], "--max_sys_cpu_pct"),
+    max_babysit_cpu_pct: float = typer.Option(DEFAULTS["max_babysit_cpu_pct"], "--max_babysit_cpu_pct"),
     monitor_interval: str = typer.Option(DEFAULTS["monitor_interval"], "--monitor_interval"),
     monitor_tolerance_count: int = typer.Option(DEFAULTS["monitor_tolerance_count"], "--monitor_tolerance_count"),
     monitor_disk_infer_by_dir: str = typer.Option(DEFAULTS["monitor_disk_infer_by_dir"], "--monitor_disk_infer_by_dir"),
@@ -1406,11 +1401,13 @@ def cmd_daemon_start(
     for k, v in (
         ("max_sys_mem_pct", max_sys_mem_pct),
         ("max_sys_disk_pct", max_sys_disk_pct),
-        ("max_sys_cpu_pct", max_sys_cpu_pct),
     ):
         if not (0 < v <= 100):
             typer.echo(f"error: {k} {v} must be in (0, 100]", err=True)
             raise typer.Exit(1)
+    if max_babysit_cpu_pct <= 0:
+        typer.echo(f"error: max_babysit_cpu_pct {max_babysit_cpu_pct} must be > 0", err=True)
+        raise typer.Exit(1)
     if monitor_tolerance_count <= 0:
         typer.echo(f"error: monitor_tolerance_count {monitor_tolerance_count} must be > 0", err=True)
         raise typer.Exit(1)
@@ -1431,7 +1428,7 @@ def cmd_daemon_start(
         d = Daemon(
             max_sys_mem_pct=max_sys_mem_pct,
             max_sys_disk_pct=max_sys_disk_pct,
-            max_sys_cpu_pct=max_sys_cpu_pct,
+            max_babysit_cpu_pct=max_babysit_cpu_pct,
             monitor_interval=parse_duration(monitor_interval),
             monitor_tolerance_count=monitor_tolerance_count,
             monitor_disk_infer_by_dir=monitor_disk_infer_by_dir,
@@ -1503,7 +1500,7 @@ def cmd_run(
     estimated_cpu_cores: float = typer.Option(
         DEFAULTS["estimated_cpu_cores"],
         "--estimated_cpu_cores",
-        help="Predicted peak CPU cores. Soft warn at 1×, hard kill if >2× sustained. Under system CPU pressure, estimate-exceeders are killed before within-estimate tasks; if the pressure is caused by an external (non-babysit) process and managed tasks combined cannot relieve the excess, the kill is skipped.",
+        help="Predicted peak CPU cores. Soft warn at 1×, hard kill if >2× sustained.",
     ),
     force: bool = typer.Option(
         False, "--force",
@@ -1680,11 +1677,13 @@ def cmd_wait_for_capacity(
     """Block until the daemon has sustained room for a task with the given
     estimates. Exits 0 on success.
 
-    Per poll the daemon computes `current_sys_used + sum_of_pending_estimates
-    + 2 × your_estimate ≤ max_sys_*_pct × total`. To pass, this must hold for
-    a *sustained* random window in [--debounce_min, --debounce_max] (default
-    1–3 min). Any pressure tick during the window resets the debounce. The
-    random window breaks symmetry between concurrent waiters.
+    Per poll the daemon checks two gates: memory (counts external use —
+    RAM exhaustion is catastrophic) and CPU (only counts babysit's own
+    tasks — external CPU doesn't block admission). To pass, both gates
+    must stay open for a *sustained* random window in [--debounce_min,
+    --debounce_max] (default 1–3 min). Any pressure tick during the
+    window resets the debounce. The random window breaks symmetry
+    between concurrent waiters.
 
     Emits `{"event":"waiting_for_capacity","phase":"pressured|debounce", ...}`
     JSON lines on stderr each poll — pair with Monitor / Bash
