@@ -841,7 +841,6 @@ rm -f "/tmp/claude-${UID}-state/git-status/$sid"
 SILENT_ENV=(
   SYSLOAD_CPU_FACTOR=999
   SYSLOAD_MEM_PCT=101
-  SYSLOAD_SWAP_PCT=101
   SYSLOAD_DISK_PCT=101
   SYSLOAD_GPU_UTIL=101
   SYSLOAD_GPU_MEM=101
@@ -849,7 +848,6 @@ SILENT_ENV=(
 TRIP_ENV=(
   SYSLOAD_CPU_FACTOR=999
   SYSLOAD_MEM_PCT=101
-  SYSLOAD_SWAP_PCT=101
   SYSLOAD_DISK_PCT=0
   SYSLOAD_GPU_UTIL=101
   SYSLOAD_GPU_MEM=101
@@ -869,9 +867,9 @@ out=$(env "${SILENT_ENV[@]}" bash ~/.claude/hooks/inject-system-load.sh <<< "$sy
 
 # Force DISK trip: %used from `df -P /` is always >0 on a mounted root
 # (filesystem metadata + journal alone exceed 1%), so DISK_PCT=0 reliably
-# trips. Avoid the MEM/SWAP paths for forcing — both compute %used via
+# trips. Avoid the MEM path for forcing — its %used is computed via
 # integer division, which floors to 0 on a high-RAM box (≥200 GB) when
-# absolute usage is <1% of total, making those tests non-deterministic on
+# absolute usage is <1% of total, making that test non-deterministic on
 # lightly-loaded CI runners.
 out=$(env "${TRIP_ENV[@]}" bash ~/.claude/hooks/inject-system-load.sh <<< "$sysl_in")
 echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("DISK")' > "$test_out" \

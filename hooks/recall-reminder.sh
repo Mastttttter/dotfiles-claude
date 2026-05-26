@@ -51,9 +51,9 @@ if [ "$COUNT" -ge "$RECALL_INTERVAL" ]; then
   echo "$FIRES" > "$FIRES_FILE"
 
   if [ $((FIRES % 2)) -eq 1 ]; then
-    MSG="Memory-worthy lesson this turn? Mistake corrected, durable fact emerged, design decision made? Call /memory-add now."
+    MSG="If you learnt a memory-worthy lesson in recent turns (e.g. mistake corrected, durable fact emerged, user taught knowledge, lesson or pitfall) → /memory-add."
   else
-    MSG="Memory not consulted recently. Read memory/pitfalls.md before risky actions; memory/pages/index.md for relevant facts."
+    MSG="Long-term memory not consulted in recent turns. Read memory/pitfalls.md before risky actions; memory/pages/index.md to look up relevant facts."
   fi
 
   jq -nc --arg msg "$MSG" '{

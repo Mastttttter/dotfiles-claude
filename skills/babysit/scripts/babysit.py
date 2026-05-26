@@ -86,7 +86,7 @@ STATUSES = ("pending", "running", "completed", "failed", "killed", "unknown")
 TERMINAL = {"completed", "failed", "killed", "unknown"}
 
 SPEC_COLUMNS = (
-    "name", "pid", "status", "kill_reason", "kill_hint", "exit_code", "command",
+    "name", "pid", "status", "kill_reason", "kill_hint", "kill_detail", "exit_code", "command",
     "elapsed_time", "estimated_time", "kill_timeout", "observability_interval",
     "last_observed_log", "time_since_last_observe",
     "cpu_cores", "cpu_pct", "estimated_cpu_cores",
@@ -107,6 +107,7 @@ KILL_HINTS: dict[str, str] = {
     "estimated_mem_exceeded": "task RSS exceeded 2× --estimated_mem_bytes sustained — your peak-memory prediction was off; raise --estimated_mem_bytes or reduce footprint, then re-queue",
     "estimated_cpu_exceeded": "task CPU exceeded 2× --estimated_cpu_cores sustained — your peak-CPU prediction was off; raise --estimated_cpu_cores or reduce parallelism, then re-queue",
     "cgroup_oom_killed": "kernel OOM-killed the task at the 3× --estimated_mem_bytes cgroup boundary — your peak-memory prediction was severely off (explosive allocation outpaced the 30s soft-watch); raise --estimated_mem_bytes substantially or reduce footprint, then re-queue",
+    "kernel_oom": "task SIGKILLed by kernel under memory pressure — reduce memory footprint, then re-queue",
     "elapsed_exceeded": "task elapsed > --kill_timeout — pass a longer --kill_timeout or speed up the job",
     "observability_stall": "task wrote no log line for > --observability_interval — ensure progress prints; check PYTHONUNBUFFERED=1",
     "manual": "killed by user via `babysit kill`",
@@ -212,7 +213,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     kill_reason TEXT,
     log_path TEXT NOT NULL,
     cwd TEXT,
-    claude_session_id TEXT
+    claude_session_id TEXT,
+    kill_detail TEXT
 );
 
 CREATE TABLE IF NOT EXISTS daemon_config (
@@ -229,6 +231,9 @@ def open_db() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    if "kill_detail" not in cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN kill_detail TEXT")
     return conn
 
 
@@ -957,6 +962,10 @@ class Daemon:
     def _enrich(self, r: sqlite3.Row) -> dict:
         d = dict(r)
         d["kill_hint"] = kill_hint_for(d.get("kill_reason"))
+        raw_detail = d.get("kill_detail")
+        if isinstance(raw_detail, str) and raw_detail:
+            with contextlib.suppress(ValueError):
+                d["kill_detail"] = json.loads(raw_detail)
         rt = self.running.get(d["name"])
         # runtime stats: present for running, None for terminal/pending
         stat_keys = ("cpu_pct", "cpu_cores", "mem_bytes", "mem_pct",
@@ -1047,6 +1056,10 @@ class Daemon:
                 if rc != 0 and cgroup_oom_killed(rt.scope_unit):
                     self._finalize(name, status="killed", exit_code=rc,
                                   reason="cgroup_oom_killed")
+                    return
+                if rc == 137 or rc == -9:
+                    self._finalize(name, status="killed", exit_code=rc,
+                                  reason="kernel_oom")
                     return
                 status = "completed" if rc == 0 else "failed"
                 self._finalize(name, status=status, exit_code=rc)
@@ -1191,7 +1204,74 @@ class Daemon:
         victim = ranked[0]
         tier_label = ("exceeds-estimate", "no-estimate", "within-estimate")[tier_of(victim)]
         self.log(f"sys-{dim} pressure ({cur:.0f}%) sustained — KILL {victim.name} ({tier_label})")
-        self._kill_task(victim.name, reason=f"system_{dim}_pressure")
+        detail = self._build_sys_kill_detail(dim, cur, sys_stats, victim, tier_label)
+        self._kill_task(victim.name, reason=f"system_{dim}_pressure", detail=detail)
+
+    def _build_sys_kill_detail(
+        self, dim: str, cur: float, sys_stats: SysStats,
+        victim: RunningTask, tier_label: str,
+    ) -> dict:
+        """Per-incident telemetry for system_<dim>_pressure kills.
+
+        Captures: sustained duration, system metric at kill, threshold, victim's
+        own footprint, total babysit-managed footprint, and (mem only) the top
+        external process so the agent can see whether external load was the
+        actual culprit.
+        """
+        d: dict[str, object] = {
+            "dim": dim,
+            "kill_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+            "system_pct": round(cur, 1),
+            "threshold_pct": (self.max_sys_mem_pct if dim == "mem"
+                              else self.max_sys_disk_pct),
+            "sustained_seconds": round(self.sys_pressure[dim] * self.monitor_interval, 1),
+            "victim_name": victim.name,
+            "victim_tier": tier_label,
+        }
+        vs = victim.last_stats
+        if dim == "mem":
+            total_ram = float(psutil.virtual_memory().total)
+            babysit_total = sum(
+                (rt.last_stats.mem_bytes if rt.last_stats else 0)
+                for rt in self.running.values()
+            )
+            d["victim_mem_bytes"] = int(vs.mem_bytes) if vs else None
+            d["victim_mem_pct"] = round(vs.mem_pct, 1) if vs else None
+            d["babysit_total_mem_bytes"] = int(babysit_total)
+            d["babysit_total_mem_pct"] = round(babysit_total / total_ram * 100.0, 1)
+            d["top_external"] = self._top_external_mem_proc()
+        elif dim == "disk":
+            du = shutil.disk_usage(self.disk_dir)
+            d["disk_dir"] = self.disk_dir
+            d["disk_used_bytes"] = int(du.used)
+            d["disk_total_bytes"] = int(du.total)
+            d["victim_disk_write_bytes"] = int(vs.disk_write_bytes) if vs else None
+        return d
+
+    def _top_external_mem_proc(self) -> dict | None:
+        """Highest-RSS process whose PID-tree is NOT under any babysit-managed PID."""
+        managed_tree: set[int] = set()
+        for rt in self.running.values():
+            with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+                p = psutil.Process(rt.pid)
+                managed_tree.add(p.pid)
+                for child in p.children(recursive=True):
+                    managed_tree.add(child.pid)
+        total_ram = float(psutil.virtual_memory().total)
+        best: dict | None = None
+        for p in psutil.process_iter(["pid", "name", "memory_info"]):
+            info = p.info
+            if info["pid"] in managed_tree or info["memory_info"] is None:
+                continue
+            rss = int(info["memory_info"].rss)
+            if best is None or rss > best["mem_bytes"]:
+                best = {
+                    "pid": int(info["pid"]),
+                    "name": info["name"] or "",
+                    "mem_bytes": rss,
+                    "mem_pct": round(rss / total_ram * 100.0, 1),
+                }
+        return best
 
     def _schedule_pending(self) -> None:
         rows = self.db.execute(
@@ -1252,7 +1332,7 @@ class Daemon:
         )
         self.log(f"[{name}] started pid={proc.pid} scope={scope_unit}")
 
-    def _kill_task(self, name: str, *, reason: str) -> None:
+    def _kill_task(self, name: str, *, reason: str, detail: dict | None = None) -> None:
         rt = self.running.get(name)
         if rt is None:
             return
@@ -1285,15 +1365,18 @@ class Daemon:
                 while time.time() < deadline and psutil.pid_exists(rt.pid):
                     time.sleep(0.1)
             rc = None  # adopted — can't waitpid cross-process
-        self._finalize(name, status="killed", exit_code=rc, reason=reason)
+        self._finalize(name, status="killed", exit_code=rc, reason=reason, detail=detail)
 
-    def _finalize(self, name: str, *, status: str, exit_code: int, reason: str | None = None) -> None:
+    def _finalize(self, name: str, *, status: str, exit_code: int, reason: str | None = None,
+                  detail: dict | None = None) -> None:
         rt = self.running.pop(name, None)
         if rt is not None:
             stop_scope(rt.scope_unit)
         self.db.execute(
-            "UPDATE tasks SET status=?, exit_code=?, ended_at=?, kill_reason=? WHERE name=?",
-            (status, exit_code, now(), reason, name),
+            "UPDATE tasks SET status=?, exit_code=?, ended_at=?, kill_reason=?, kill_detail=? "
+            "WHERE name=?",
+            (status, exit_code, now(), reason,
+             json.dumps(detail) if detail else None, name),
         )
         self.log(f"[{name}] {status} exit={exit_code} reason={reason or '-'}")
 
