@@ -158,9 +158,15 @@ Format: `- TRIGGER → mitigation.`
 
 Self-audit (heuristic, not tag-gated): walk promoted.md and judge each bullet — if it warrants a pre-action trigger entry in the routing table (typical signals: mistake-correction pattern, recurring AI default that backfires, irreversible foot-gun), check whether `pitfalls.md` already carries a matching trigger; insert if missing, reword if drifted. Tags like `foot-gun` / `costly-error` / `user-correction` are hints, not gates — promote based on whether a future Claude would benefit from PAUSE-before-action recall.
 
-Cap at ~50 entries. Beyond that, demote stale or rarely-fired triggers — move details to memory pages, shorten the projection line, or drop entirely.
+Prune triage (walk every existing entry, drop if any applies):
+1. **Duplicate of always-loaded context** — system prompt / `~/.claude/CLAUDE.md` / `~/CLAUDE.md` / a tool description already states the same rule. Pitfalls.md should not echo what every session already sees.
+2. **Self-correcting error** — the mistake produces an immediate, unambiguous error (e.g. CLI flag rejected, missing-arg error message) that the agent reads and retries from. No pre-action PAUSE saves time.
+3. **Informational / knowledge notebook** — the entry teaches a fact or methodology rather than blocking an action ("X is unreliable", "use Y mechanism"). Belongs in a page under `pages/`, not the always-loaded routing table.
+4. **Source-claim drift** — the underlying promoted.md claim has been edited, removed, superseded, or no longer applies. Re-sync the trigger or drop it; do not let the projection drift from its source.
 
-Quarterly review: audit `pitfalls.md` for entries whose source claim in promoted.md has changed, been removed, or no longer applies. Re-sync rather than letting the projection drift.
+Preserve regardless of section, domain specificity, or single-fire history: any entry whose match-moment is a real action the agent CAN take and whose mitigation isn't intuitive — action-blocking guardrails. Section breadth is not evidence for or against keeping; only the "informational vs action-blocking" axis is.
+
+Cap at ~50 entries. Beyond that, demote stale or rarely-fired triggers — move details to memory pages, shorten the projection line, or drop entirely.
 
 ## SCRIPTS TO USE
 
