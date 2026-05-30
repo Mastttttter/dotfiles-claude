@@ -11,4 +11,4 @@ if [ "$n" -le 1 ]; then
     exit 0
 fi
 
-emit_pre_tool_deny "AskUserQuestion called with $n questions in one call. Per CLAUDE.md 'Ask one question at a time': split into sequential calls — present one decision, get an answer, then the next."
+emit_pre_tool_deny "AskUserQuestion called with $n questions in one call. Please ask one question at a time: split into sequential calls — present one decision, get an answer, then the next."
