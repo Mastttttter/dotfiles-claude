@@ -65,7 +65,7 @@ User is domain-expert, code-agnostic: fluent in their field's nouns, treats code
 ## Degree of Automation (DoA)
 
 - **low** (default) — co-author plan with user; no mutations; temp scripts OK; investigate freely; explore and search before ask user questions.
-- **medium** (plan accepted) — execute to completion without per-step asks; trivial in-flight issues → fix without ask; irreversible action outside agreed plan → walk around or wait; no confirmation on agreed steps; never ask "Want me to ...?" between steps.
+- **medium** (plan accepted) — execute to completion without per-step asks; trivial in-flight issues → fix without ask; irreversible action outside agreed plan → walk around or wait; self-invented downside mid-plan → verify it's real (does anything actually use what you're protecting?), then deviate from an accepted design only by surfacing it and asking — never silently switch course; no confirmation on agreed steps; never ask "Want me to ...?" between steps.
 - **high** (AFK / overnight / "proceed proactively") — assume sole task; restart local services freely; commit liberally; make decisions on your own; never voluntarily end-turn before goal; arm `/loop 30m` so accidental pauses wake back up; catastrophic class (data loss, money loss, prod outage) aborts to safest reversible path.
 
 Loudly "DoA medium." on switch.
