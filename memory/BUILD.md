@@ -2,6 +2,13 @@
 
 Recipes for building and maintaining the long-term memory system.
 
+## PIPELINE MAP
+
+- INIT (bootstrap) and UPDATE (weekly) both run: DISTILL → EXTRACT → CLUSTER → TRIAGE → PROMOTE.
+- Every pass that edits promoted.md ends by re-running BUILD INDEX, then BUILD PITFALLS.
+- Maintenance (optional): AUDIT and CLEAN edit promoted.md; PRUNE PITFALLS trims pitfalls.md, except its DEMOTE-to-pages case which also edits promoted.md. Any promoted.md edit triggers the rule above.
+- Scripts: distill.py · promote.py · pages.py.
+
 ## ARCHITECTURE
 
 - `promoted.md` — source of truth. Curated claims under H2 themes.
@@ -87,11 +94,7 @@ Incremental update of ~/.claude/memory/. Same KEEP/DROP rules and FALSE-NEGATIVE
      - Truncate `~/.claude/memory/staging.md` to empty.
      - Then run pages.py.
 
-  7. BUILD PITFALLS:
-     - Walk every new [+] bullet just promoted.
-     - For each with tag `foot-gun`, `costly-error`, or `user-correction`: check if `pitfalls.md` already has a matching trigger; insert if missing, reword if drifted.
-     - Edit `pitfalls.md` directly — no script. Trigger form: "About to X → mitigation."
-     - Cap at ~50 entries; demote stale triggers before adding new ones.
+  7. BUILD PITFALLS: run the BUILD PITFALLS pass below (self-audit + prune triage) over every new [+] bullet just promoted.
 
 ## CLEAN INSTRUCTION
 
@@ -173,7 +176,9 @@ Prune triage — walk every existing entry and assign ONE of FOUR dispositions:
 
 Section breadth, domain specificity, and single-fire history are NOT evidence for dropping — only the four criteria above are.
 
-Cap at ~50 entries. Beyond that, prefer GENERALIZE / DEMOTE over outright DROP to preserve the lesson trail.
+### PRUNE PITFALLS
+
+Cap at <100 entries. Beyond that, prefer GENERALIZE / DEMOTE over outright DROP to preserve the lesson trail.
 
 ## SCRIPTS TO USE
 
@@ -192,3 +197,4 @@ Self-check before distill completion claim:
 - [ ] BUILD PITFALLS
 - [ ] AUDIT INSTRUCTION (optional)
 - [ ] CLEAN INSTRUCTION (optional)
+- [ ] PRUNE PITFALLS (optional)
