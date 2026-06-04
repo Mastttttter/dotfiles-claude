@@ -42,6 +42,33 @@ MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024  # skip files larger than 5 MB
 BINARY_SENTINEL = "\0BINARY\0"
 TOOLBIG_SENTINEL = "\0TOOBIG\0"
 CODEX_PROMPT_FILE = Path(__file__).parent / "audit-fresh-eye-codex.md"
+# Source of truth for the rule catalog: the claude agent file. The codex wrapper
+# and the validator below both derive from it, so a rule edit touches one file.
+AGENT_RULES_FILE = Path(__file__).parent.parent / "agents" / "audit-fresh-eye.md"
+AUDIT_RULES_MARKER = "<!-- AUDIT_RULES -->"
+
+
+def _load_catalog() -> str:
+    """Extract the canonical DOC + CODE category sections from the agent file.
+
+    Captures from '## DOC categories' through the end of '## CODE categories',
+    stopping at the first following section heading. Empty string if the file
+    is unreadable (callers degrade rather than crash the hook)."""
+    try:
+        lines = AGENT_RULES_FILE.read_text().splitlines(keepends=True)
+    except OSError:
+        return ""
+    out: list[str] = []
+    capturing = False
+    for ln in lines:
+        if ln.startswith("## "):
+            if ln[3:].strip() in ("DOC categories", "CODE categories"):
+                capturing = True
+            elif capturing:
+                break
+        if capturing:
+            out.append(ln)
+    return "".join(out).strip()
 
 
 def should_skip_audit_path(abs_path: str, cwd: str) -> bool:
@@ -287,21 +314,21 @@ def cmd_show(sid: str | None, context: int, color: bool) -> int:
     return 0
 
 
-# Category tag set — source of truth lives in ~/.claude/agents/audit-fresh-eye.md;
-# this set only validates that the subagent's verdict uses a known tag.
-ALL_CATEGORIES = frozenset({
-    "DOC-contradiction", "DOC-over-emphasis", "DOC-tonal-drift",
-    "DOC-justifying-aside", "DOC-defensive-caveat", "DOC-hallucinated-ref",
-    "DOC-stale-reference", "DOC-duplicates-source", "DOC-catalog-narration", "DOC-audience-mismatch", "DOC-incident-leak",
-    "DOC-style-drift", "DOC-inverted-phrasing", "DOC-patch-over-restructure",
-    "DOC-positional-fit",
-    "CODE-contradiction", "CODE-comment-mismatch", "CODE-narrative-comment", "CODE-structural-drift",
-    "CODE-defensive", "CODE-bandaid",
-    "CODE-hallucinated-ref",
-    "CODE-style-drift", "CODE-debug-leftover",
-    "CODE-missed-extraction", "CODE-misplacement",
-    "CODE-sync-not-updated",
-})
+# Valid tag set is derived from the agent file's catalog (single source). The
+# leading `- \`TAG\`` token of each rule bullet is the tag.
+_TAG_RE = re.compile(r"^- `([A-Z]+-[a-z-]+)`", re.M)
+_CATEGORY_FALLBACK_RE = re.compile(r"^(DOC|CODE)-[a-z-]+$")
+ALL_CATEGORIES = frozenset(_TAG_RE.findall(_load_catalog()))
+
+
+def _is_known_category(category: str) -> bool:
+    """Accept a verdict tag. Strict membership when the catalog loaded; if it
+    didn't (file unreadable → empty set), fall back to accepting any well-formed
+    DOC-/CODE- tag so a parse failure degrades the audit rather than silently
+    dropping every finding."""
+    if ALL_CATEGORIES:
+        return category in ALL_CATEGORIES
+    return bool(_CATEGORY_FALLBACK_RE.match(category))
 
 
 def render_diff_from_path(json_path: Path) -> str:
@@ -364,7 +391,7 @@ def _parse_verdict(raw: str) -> tuple[str, list[dict]]:
         if len(parts) != 3:
             continue  # skip prose, code fences, blank lines, etc.
         path, category, fix = (p.strip() for p in parts)
-        if not path or category not in ALL_CATEGORIES or not fix:
+        if not path or not _is_known_category(category) or not fix:
             continue
         issues.append({"file": path, "category": category, "fix": fix})
     return ("FIXES", issues)
@@ -637,6 +664,8 @@ def _spawn_audit_codex(diff: str, cwd: str, sid: str) -> str | None:
     except OSError as e:
         _stop_log(sid, f"codex prompt file unreadable: {e}")
         return None
+    # Splice the canonical rule catalog into the wrapper's marker.
+    prompt_body = prompt_body.replace(AUDIT_RULES_MARKER, _load_catalog())
 
     out_file = AUDIT_DIR / f"{sid}.codex.out"
     out_file.unlink(missing_ok=True)
