@@ -12,6 +12,10 @@ claude() {
     command claude --thinking-display summarized --allow-dangerously-skip-permissions "$@"
 }
 
+ultraclaude() {
+    claude --model 'opus[1m]' --effort max --settings '{"disableWorkflows": false, "effort": "ultracode"}'
+}
+
 opus() {
     claude --model opus "$@"
 }

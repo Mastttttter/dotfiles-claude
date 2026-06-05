@@ -9,6 +9,10 @@ function claude
     command claude --thinking-display summarized --allow-dangerously-skip-permissions $argv
 end
 
+function ultraclaude
+    claude --model 'opus[1m]' --effort max --settings '{"disableWorkflows": false, "effort": "ultracode"}'
+end
+
 function opus
     claude --model opus $argv
 end

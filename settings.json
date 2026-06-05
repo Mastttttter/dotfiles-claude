@@ -493,6 +493,7 @@
   },
   "viewMode": "default",
   "effortLevel": "high",
+  "advisorModel": "opus",
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,
   "tui": "fullscreen",
@@ -506,6 +507,5 @@
   "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
-  "voiceEnabled": true,
-  "advisorModel": "opus"
+  "voiceEnabled": true
 }
