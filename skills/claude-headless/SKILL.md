@@ -52,6 +52,7 @@ Load these on demand based on what the user needs:
 - **`references/auth.md`** — Authentication: subscription OAuth, API key, apiKeyHelper, `--bare` caveat, token storage
 - **`references/env-vars.md`** — Complete environment variables: auth, models, thinking, bash/network timeouts, telemetry, TLS, session, plugins, MCP, detection
 - **`references/stream-json.md`** — Stream JSON protocol: stdout events, stdin messages, pipe-chaining
+- **`references/agent-view.md`** — Background sessions & `claude agents`: `--bg`, supervisor, shell management commands, peek/attach, worktree isolation, vs claude-dm
 - **`references/permissions.md`** — Headless permission modes, --allowedTools, --permission-prompt-tool MCP
 - **`references/sdks.md`** — TypeScript and Python Agent SDKs: API, options, streaming, multi-turn
 - **`references/patterns.md`** — Real-world patterns: CI/CD, bot bridges, structured extraction, Agent Teams headless
