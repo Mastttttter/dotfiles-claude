@@ -91,6 +91,7 @@ Every conversation starts with ro. Loudly "rw." on switch. NEVER make mutations 
 ## Progress Report Format
 
 Full form (when asked for progress, or before taking next task):
+
 ```markdown
 - [x] Done task
 - [·] Running task (optional ETA, completed/total)

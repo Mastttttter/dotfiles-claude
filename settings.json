@@ -24,7 +24,9 @@
     "CAVEMAN_DEFAULT_MODE": "ultra"
   },
   "attribution": {
-    "sessionUrl": false
+    "sessionUrl": false,
+    "commit": "",
+    "pr": ""
   },
   "permissions": {
     "defaultMode": "bypassPermissions",
@@ -482,7 +484,7 @@
     }
   },
   "viewMode": "default",
-  "effortLevel": "high",
+  "effortLevel": "xhigh",
   "advisorModel": "opus",
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,
