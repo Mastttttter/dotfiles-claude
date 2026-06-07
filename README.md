@@ -7,7 +7,8 @@ Personal [Claude Code](https://docs.anthropic.com/en/docs/claude-code) configura
 **Linux / macOS only.** Claude Code itself runs on Windows, but `setup.sh`, the integration shims, and every hook in this pack are bash. WSL works; native Windows shells are not supported.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/archibate/dotfiles-claude/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Mastttttter/dotfiles-claude/main/setup.sh
+ | bash
 ```
 
 > Prerequisites: `claude`, `git`, `jq`, `uv`, `node`, `npm`.
@@ -33,9 +34,6 @@ claude "Check whether kitty (only if I'm in a graphical X/Wayland session) and t
 ```
 
 For reference, my personal configs that pair well with this setup:
-
-- **[archibate/dotfiles-tmux](https://github.com/archibate/dotfiles-tmux)** — tmux config tuned for the `claude-dm` peer-to-peer messaging skill and multi-session orchestration.
-- **[archibate/dotfiles](https://github.com/archibate/dotfiles)** — the rest (kitty, shell, neovim, etc.). Browse and cherry-pick what you want; there's no single one-liner installer — `kitty.conf`, `.zshrc`, etc.
 
 ## What's included
 
