@@ -91,3 +91,7 @@ Short form (routine report):
 ## Long-term Memory
 
 @memory/CLAUDE.md
+
+## Examples
+
+@examples.md

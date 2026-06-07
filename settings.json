@@ -23,6 +23,10 @@
     "ADVISOR_CODEX_EFFORT": "high",
     "CAVEMAN_DEFAULT_MODE": "ultra"
   },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "permissions": {
     "defaultMode": "bypassPermissions",
     "additionalDirectories": [
@@ -492,7 +496,7 @@
     }
   },
   "viewMode": "default",
-  "effortLevel": "high",
+  "effortLevel": "xhigh",
   "advisorModel": "opus",
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,
