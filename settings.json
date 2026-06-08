@@ -3,7 +3,7 @@
   "skillListingBudgetFraction": 0.05,
   "env": {
     "IS_DEMO": "1",
-    "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "true",
     "CLAUDE_CODE_FORK_SUBAGENT": "1",
     "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION": "1",
     "CLAUDE_CODE_BASH_SANDBOX_SHOW_INDICATOR": "1",
