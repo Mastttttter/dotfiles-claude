@@ -127,8 +127,13 @@ dog.someInterface(dep1.get());
 *two* distinct jobs, and both are worth an interface:
 
 1. **Dispatch / dependency injection** — one shared caller works across subtypes
-   it doesn't know. Without it, every new subtype copy-pastes the shared logic
-   and one requirement change means editing N files.
+   it doesn't know. This is what replaces *branching on a type tag*
+   (`switch (getType())`, `if (type == Dog)`) to pick behavior: let the vtable
+   dispatch, so adding a subtype touches no existing branch. Without it, every new
+   subtype copy-pastes the shared logic and one requirement change means editing N
+   files. (The `if constexpr (is_same_v<…>)` chain in
+   `references/generics-compile-time.md` is the compile-time form of the same
+   anti-pattern.)
 
    ```cpp
    void feed(Animal *a) { puts("feeding"); a->speak(); puts("done"); }
