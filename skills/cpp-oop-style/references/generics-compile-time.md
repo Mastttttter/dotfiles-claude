@@ -5,29 +5,37 @@ no vtable, no heap, no runtime branch. The governing idea:
 
 > **Duck typing with a checked contract.** A template already accepts any type
 > that "quacks right"; `concept` / `requires` makes that contract explicit, and
-> `if constexpr` picks the branch per type before any code is generated.
+> **overload resolution — not a type-switch — dispatches among types** at compile
+> time, the way a vtable does at runtime.
 
 This is the static twin of the polymorphism in `SKILL.md` — reach for it when the
-type set is *closed and known*, prefer a `virtual` interface when it is *open*.
+type set is *closed and known*, prefer a `virtual` interface when it is *open*. The
+same principle carries over: dispatch on type with overloads, **never** by
+switching on a type tag (`getType()` at runtime, `is_same_v` at compile time).
 
-## `if constexpr` — compile-time branch
+## `if constexpr` — gate a step, don't switch on type
 
-A `constexpr` condition decided at compile time. The dead branch is **not
-compiled**, so it may legally contain code that wouldn't compile for this type:
+`if constexpr` decides a compile-time condition and **drops the dead branch before
+compilation**, so it may legally hold code that wouldn't compile for this type. Its
+honest uses are narrow:
+
+- **Capability gating** — do an optional step only when the type supports it:
 
 ```cpp
 template <class T>
-void greet(T const &animal) {
-    animal.bark();
-    if constexpr (!std::is_same_v<T, Goldfish>) {   // pruned for Goldfish
-        animal.intro();                             // Goldfish has no intro() — never compiled
-    }
+void save(T const &x, Archive &ar) {
+    ar.write(x.bytes());
+    if constexpr (requires { x.checksum(); }) ar.write(x.checksum());   // only if present
 }
 ```
 
-No branch instruction reaches the generated assembly, optimization on or off. This
-is the compile-time form of the template-`Func` / `auto`-param dispatch the main
-skill already teaches.
+- **Variadic recursion termination** — stop when the parameter pack is empty.
+
+What it is **not** for: choosing among a fixed set of types.
+`if constexpr (is_same_v<T, Dog>) … else if constexpr (is_same_v<T, Cat>) …` is
+the compile-time twin of the `getType()` / `enum`-switch anti-pattern the main
+skill rejects — every new type forces an edit to the chain. Dispatch on type with
+**overloads** (below), not a type-switch.
 
 ## `requires` — does this expression compile?
 
@@ -46,26 +54,26 @@ A `requires (T t) { ... }` introduces compile-time-only sample variables (no
 runtime cost), and several statements all must compile:
 `requires { ++it; --it; }` ≡ `requires { ++it; } && requires { --it; }`.
 
-## `concept` — name the contract
+## `concept`-constrained overloads — the static twin of virtual dispatch
 
 Hoist a recurring `requires` into a named `concept` (a `constexpr bool` variable
-template). A type that satisfies the concept *is* that concept — duck typing with a
-name:
+template): a type that satisfies it *is* that concept — duck typing with a name.
+Then write **one overload per concept** and let overload resolution pick the
+most-constrained match, exactly as a vtable picks the override at runtime — but at
+compile time, with zero overhead and no type-switch:
 
 ```cpp
-template <class It> concept RandomAccess = requires (It it, int n) { it += n; it -= n; };
 template <class It> concept Bidirectional = requires (It it) { ++it; --it; };
+template <class It> concept RandomAccess  = Bidirectional<It>           // refines, so it subsumes
+                                          && requires (It it, int n) { it += n; };
 
-template <class It>
-void advance(It &it, int n) {
-    if constexpr (RandomAccess<It>)      it += n;          // pick the best per type
-    else if constexpr (Bidirectional<It>) while (n-- > 0) ++it;
-    else throw std::logic_error("It is not an iterator");
-}
+void advance(RandomAccess auto &it, int n)  { it += n; }                // more constrained → wins
+void advance(Bidirectional auto &it, int n) { while (n-- > 0) ++it; }   // resolution dispatches
 ```
 
-Use a concept to **constrain a template parameter** so callers get a clear error
-instead of a deep instantiation dump, and so the right overload is chosen:
+Adding a new iterator kind adds a new overload — it touches no existing one, the
+same open/closed property the skill values in `virtual`. Constraining a parameter
+also gives callers a clear error instead of a deep instantiation dump:
 
 ```cpp
 void sort(RandomAccess auto first, RandomAccess auto last);   // C++20 constrained auto

@@ -154,8 +154,9 @@ struct, shared state-plus-behavior to a class, a fixed set of variants to an
 to a `virtual` interface — in that order. Don't jump to the interface when a
 function would do. The real cost of copy-paste is not the typing — it is the typo
 you later make in one rarely-run branch. When the type set is closed and known at
-compile time, resolve it at compile time — `variant` / `if constexpr` / `concept`
-(see `references/generics-compile-time.md`).
+compile time, resolve it at compile time — a `variant` or `concept`-constrained
+overloads (not an `if constexpr` type-switch; see
+`references/generics-compile-time.md`).
 
 **One interface, one responsibility.** Never mix concerns (e.g. IO *and*
 computation) in one abstract class — it forces an N×M subclass explosion. Split
@@ -353,10 +354,11 @@ compiler is your reviewer.
 - **In range-for: `auto const &` to read, `auto &` to modify.** Never bare
   `auto` — it copies. For maps: `for (auto const &[k, v] : m)`.
 - C++20 `auto` parameters are implicit templates: `auto square(auto const &x)`.
-- **`if constexpr` for compile-time branches** — prune type-incompatible code per
-  type; the compile-time twin of template-`Func` dispatch. Pair with `concept` /
-  `requires` to give a generic parameter a checked contract. (See
-  `references/generics-compile-time.md`.)
+- **Dispatch on type with `concept`-constrained overloads**, the static twin of
+  virtual dispatch — never an `if constexpr (is_same_v<…>)` chain, which is the
+  compile-time form of the `getType()` / `enum`-switch anti-pattern. Reserve
+  `if constexpr` for capability gating (`requires { … }`) and variadic recursion.
+  (See `references/generics-compile-time.md`.)
 
 ## Compiler hygiene
 
@@ -445,9 +447,9 @@ Load these when the task touches their area:
 - `references/wrapping-c-resources.md` — RAII wrappers for opaque C handles:
   move-only handle template, `error_category`, check-on-assign with
   `source_location`, builders, scope-guard binds.
-- `references/generics-compile-time.md` — compile-time dispatch: `if constexpr`,
-  `requires` / `concept` checked duck typing, `std::variant` + `std::visit`
-  closed-set polymorphism, perfect forwarding.
+- `references/generics-compile-time.md` — compile-time dispatch via
+  `concept`-constrained overloads (not type-switching), `if constexpr` capability
+  gating, `std::variant` + `std::visit` closed-set polymorphism, perfect forwarding.
 
 Source material (the "why" behind these rules), all by the same author:
 <https://github.com/parallel101/cppguidebook> (`design_virtual.md`,
