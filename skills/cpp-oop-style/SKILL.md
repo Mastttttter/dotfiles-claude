@@ -150,9 +150,12 @@ prefer the interface.
 **Escalate abstraction only as far as the duplication demands.** Lift a repeated
 value to a variable, repeated logic to a function, a clump of arguments to a
 struct, shared state-plus-behavior to a class, a fixed set of variants to an
-`enum`, and an open set of behaviors to a `virtual` interface — in that order.
-Don't jump to the interface when a function would do. The real cost of copy-paste
-is not the typing — it is the typo you later make in one rarely-run branch.
+`enum`, a fixed set of *types* to a `std::variant`, and an open set of behaviors
+to a `virtual` interface — in that order. Don't jump to the interface when a
+function would do. The real cost of copy-paste is not the typing — it is the typo
+you later make in one rarely-run branch. When the type set is closed and known at
+compile time, resolve it at compile time — `variant` / `if constexpr` / `concept`
+(see `references/generics-compile-time.md`).
 
 **One interface, one responsibility.** Never mix concerns (e.g. IO *and*
 computation) in one abstract class — it forces an N×M subclass explosion. Split
@@ -201,6 +204,10 @@ state-carrying behavior → strategy objects.
 - *Visitor / double-dispatch*: when behavior depends on two types (or you'd
   otherwise write `getType()` / `isEatable()` and switch on it), use
   `accept`/`visit` so the compiler picks the overload — don't query a type tag.
+- *Closed-set variant*: a fixed, known set of types → `std::variant` + `std::visit`
+  instead of a class hierarchy — value semantics, no heap or vtable. Use a
+  `virtual` interface instead when the set is open. (See
+  `references/generics-compile-time.md`.)
 - *Flyweight*: when many objects share identical heavy data (a texture, a lookup
   table), hoist it into a separate type held by a `shared_ptr`; keep only the
   per-instance data (position, velocity) local. 1000 bullets, one shared sprite —
@@ -346,6 +353,10 @@ compiler is your reviewer.
 - **In range-for: `auto const &` to read, `auto &` to modify.** Never bare
   `auto` — it copies. For maps: `for (auto const &[k, v] : m)`.
 - C++20 `auto` parameters are implicit templates: `auto square(auto const &x)`.
+- **`if constexpr` for compile-time branches** — prune type-incompatible code per
+  type; the compile-time twin of template-`Func` dispatch. Pair with `concept` /
+  `requires` to give a generic parameter a checked contract. (See
+  `references/generics-compile-time.md`.)
 
 ## Compiler hygiene
 
@@ -365,8 +376,13 @@ of review comments. Build with:
 ```
 
 Add `-D_GLIBCXX_DEBUG` in development builds to catch iterator/bounds misuse at
-runtime (every linked translation unit must match). And decompose programs into
-named functions — don't pile logic directly into `main`.
+runtime (every linked translation unit must match).
+
+**Function discipline.** Decompose programs into named, single-responsibility
+functions — don't pile logic into `main`, and don't fuse unrelated jobs (a `sum`
+that also prints; let the caller decide what to do with the result). Prefer
+early-return guard clauses over deep nesting, and keep each function within a
+screenful — Linus's rule of thumb: ≤3 levels of nesting, ≤24 lines, ≤80 columns.
 
 ## Pragmatics — when to dial it back
 
@@ -429,12 +445,16 @@ Load these when the task touches their area:
 - `references/wrapping-c-resources.md` — RAII wrappers for opaque C handles:
   move-only handle template, `error_category`, check-on-assign with
   `source_location`, builders, scope-guard binds.
+- `references/generics-compile-time.md` — compile-time dispatch: `if constexpr`,
+  `requires` / `concept` checked duck typing, `std::variant` + `std::visit`
+  closed-set polymorphism, perfect forwarding.
 
 Source material (the "why" behind these rules), all by the same author:
 <https://github.com/parallel101/cppguidebook> (`design_virtual.md`,
 `no_more_new.md`, `type_rich_api.md`, `design_functor.md`, `design_gamedev.md`,
 `error_code.md`, `cpp_lifetime.md`, `lambda.md`, `functions.md`, `auto.md`,
-`platform.md`) and the lecture repo <https://github.com/parallel101/course>
+`design_concept.md`, `platform.md`) and the lecture repo
+<https://github.com/parallel101/course>
 (the `design`, `stl`, and `cmake` sessions — singleton, get/set, type erasure,
 move semantics). Real code worth reading: <https://github.com/archibate/co_async>
 (design idioms) and parallel101/opengltutor's `check_gl.hpp` (the cleanest RAII
