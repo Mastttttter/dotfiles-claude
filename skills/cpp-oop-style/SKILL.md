@@ -195,7 +195,7 @@ object's own members → *Template Method*: the base *is* the strategy, the
 state-carrying behavior → strategy objects.
 
 **Thin virtual core, fat non-virtual API.** Put only primitives behind `virtual`
-(`raw_read`, `raw_write`, `raw_seek`); build the rich convenience API
+(`do_read`, `do_write`, `do_seek`); build the rich convenience API
 (`getline`, `flush`) as non-virtual methods on top. Few virtuals, much reuse.
 
 **Compose, don't multiply subclasses.**
