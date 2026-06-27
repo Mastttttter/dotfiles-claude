@@ -51,7 +51,7 @@ Step 2 — URLs matching a known domain:
 | `mp.weixin.qq.com` (微信公众号) | `/scrapling` skill — `scrapling extract get <url>` works without a browser |
 | `www.cnblogs.com` (博客园) | Plain defuddle works — server-rendered HTML with the article body inline. For a user's post index: `curl -sL 'https://www.cnblogs.com/<user>/rss'` (Atom feed) |
 | `blog.csdn.net` (CSDN) | `/scrapling` skill — plain `curl` returns a JS-skeleton (content is JS-loaded) and defuddle hits 404 anti-bot. For a summary-only index: `curl -sL 'https://blog.csdn.net/<user>/rss/list'` returns RSS with 摘要 (not full bodies) |
-| `zhihu.com` / `zhuanlan.zhihu.com` (知乎) | Hard — plain `curl` returns a bot-challenge page and even scrapling's `stealthy-fetch` gets 403 with empty content. Try `/chrome-cdp` with the user's logged-in session, or ask them to paste the content |
+| `zhihu.com` / `zhuanlan.zhihu.com` (知乎) | `scripts/fetch_zhihu.py <url>` — see `references/zhihu.md` |
 | `juejin.cn` (掘金) | `/scrapling` skill — Nuxt SPA; escalate to `/chrome-cdp` if stealthy-fetch returns only shell |
 | `segmentfault.com` (思否) | `/scrapling` skill — custom HTTP 468 anti-bot; escalate to `/chrome-cdp` if stealthy-fetch fails |
 | `weibo.com` (微博) | `/scrapling` skill — JS-rendered status pages; escalate to `/chrome-cdp` if stealthy-fetch returns only chrome |
