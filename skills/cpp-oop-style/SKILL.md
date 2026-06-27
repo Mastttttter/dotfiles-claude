@@ -239,11 +239,28 @@ a code change — the test double is just another implementation behind the seam
 **A single-implementation interface is justified — for hiding, not dispatch.**
 Even when only one `…Impl` will ever exist, the compile-firewall / ABI / test-seam
 payoff of point 2 still earns the interface — the deliberate exception to "don't
-over-abstract." If you want *only* the compile firewall and never a second
-implementation or a fake, classic PIMPL — a `unique_ptr<Impl>` member, destructor
-declared in the header and `= default`-ed in the `.cpp` — gives the same hiding
-without virtuals; reach for the interface when you also want the test or backend
-seam.
+over-abstract." The public header carries only the interface and a factory; the
+sole `…Impl` and its heavy headers stay in the `.cpp`:
+
+```cpp
+// Widget.h — interface + factory are the whole public surface
+struct Widget {
+    virtual ~Widget() = default;
+    virtual void draw() = 0;
+};
+std::unique_ptr<Widget> makeWidget(WidgetConfig const &cfg);
+
+// Widget.cpp — the lone impl and its <heavy/thirdparty.h> are hidden here
+struct WidgetImpl final : Widget {
+    void draw() override { /* ... */ }
+};
+std::unique_ptr<Widget> makeWidget(WidgetConfig const &cfg) {
+    return std::make_unique<WidgetImpl>(cfg);
+}
+```
+
+Prefer this over classic value-semantic PIMPL when you also want a test fake or a
+second backend later; plain PIMPL gives *only* the compile firewall, no seam.
 
 **Command/callback pairs (Api / Spi).** For a subsystem with inversion of
 control, split the two directions into two interfaces: an **`Api`** (the
@@ -477,7 +494,10 @@ Source material (the "why" behind these rules), all by the same author:
 `design_concept.md`, `platform.md`) and the lecture repo
 <https://github.com/parallel101/course>
 (the `design`, `stl`, and `cmake` sessions — singleton, get/set, type erasure,
-move semantics). Real code worth reading: <https://github.com/archibate/co_async>
+move semantics). The single-implementation interface and the `Api` / `Spi`
+command-callback split are drawn from the author's `archibate/MDD3` production
+trading system — ground-truth high-quality design. Real code worth reading:
+<https://github.com/archibate/co_async>
 (design idioms) and parallel101/opengltutor's `check_gl.hpp` (the cleanest RAII
 C-handle wrapper). Further reading: cppreference.com, hackingcpp.com,
 learncpp.com; godbolt.org / cppinsights.io / quick-bench.com to see codegen and
