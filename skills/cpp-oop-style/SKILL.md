@@ -131,9 +131,7 @@ dog.someInterface(dep1.get());
    (`switch (getType())`, `if (type == Dog)`) to pick behavior: let the vtable
    dispatch, so adding a subtype touches no existing branch. Without it, every new
    subtype copy-pastes the shared logic and one requirement change means editing N
-   files. (The `if constexpr (is_same_v<…>)` chain in
-   `references/generics-compile-time.md` is the compile-time form of the same
-   anti-pattern.) The payoff is **open for extension, closed for modification** —
+   files. The payoff is **open for extension, closed for modification** —
    a new subtype, even one written later by another module or plugin, slots in
    behind the interface without reopening any caller.
 
@@ -499,10 +497,7 @@ Source material (the "why" behind these rules), all by the same author:
 `design_concept.md`, `platform.md`) and the lecture repo
 <https://github.com/parallel101/course>
 (the `design`, `stl`, and `cmake` sessions — singleton, get/set, type erasure,
-move semantics). The single-implementation interface and the `Api` / `Spi`
-command-callback split are drawn from the author's `archibate/MDD3` production
-trading system — ground-truth high-quality design. Real code worth reading:
-<https://github.com/archibate/co_async>
+move semantics). Real code worth reading: <https://github.com/archibate/co_async>
 (design idioms) and parallel101/opengltutor's `check_gl.hpp` (the cleanest RAII
 C-handle wrapper). Further reading: cppreference.com, hackingcpp.com,
 learncpp.com; godbolt.org / cppinsights.io / quick-bench.com to see codegen and
