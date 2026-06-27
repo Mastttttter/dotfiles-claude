@@ -245,10 +245,30 @@ declared in the header and `= default`-ed in the `.cpp` — gives the same hidin
 without virtuals; reach for the interface when you also want the test or backend
 seam.
 
-**Command/callback pairs.** For a subsystem with inversion of control, define
-two interfaces: an `Api` (methods you call in) and an `Spi` (methods called back
-to you). The owner implements the `Spi` and holds the `Api`; wire with
+**Command/callback pairs (Api / Spi).** For a subsystem with inversion of
+control, split the two directions into two interfaces: an **`Api`** (the
+*application programming interface* — commands you call *into* the subsystem) and
+an **`Spi`** (the *service provider interface* — events the subsystem calls *back*
+out to you). The owner implements the `Spi` and holds the `Api`; wire the two with
 `api->setSpi(this)`.
+
+```cpp
+struct PlayerSpi {                       // you implement — called back on events
+    virtual ~PlayerSpi() = default;
+    virtual void onTrackEnded() = 0;
+};
+struct PlayerApi {                       // you call in — commands
+    virtual ~PlayerApi() = default;
+    virtual void setSpi(PlayerSpi *spi) = 0;
+    virtual void play(Track const &t) = 0;
+};
+
+struct App final : PlayerSpi {           // owner: implements Spi, holds Api
+    App(PlayerApi *api) : api(api) { api->setSpi(this); }
+    void onTrackEnded() override { api->play(next()); }   // reacts to the callback
+    PlayerApi *api;
+};
+```
 
 **Singleton — encapsulate the one instance, never a bare global.** For a genuinely
 process-wide subsystem, hide the constructor, delete copy/move, and hand out the
