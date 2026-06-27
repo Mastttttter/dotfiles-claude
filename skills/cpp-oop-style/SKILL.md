@@ -133,7 +133,9 @@ dog.someInterface(dep1.get());
    subtype copy-pastes the shared logic and one requirement change means editing N
    files. (The `if constexpr (is_same_v<…>)` chain in
    `references/generics-compile-time.md` is the compile-time form of the same
-   anti-pattern.)
+   anti-pattern.) The payoff is **open for extension, closed for modification** —
+   a new subtype, even one written later by another module or plugin, slots in
+   behind the interface without reopening any caller.
 
    ```cpp
    void feed(Animal *a) { puts("feeding"); a->speak(); puts("done"); }
@@ -252,6 +254,9 @@ std::unique_ptr<Widget> makeWidget(WidgetConfig const &cfg);
 
 // Widget.cpp — the lone impl and its <heavy/thirdparty.h> are hidden here
 struct WidgetImpl final : Widget {
+    heavy::thirdparty::Object object;
+
+    WidgetImpl(WidgetConfig const &cfg) { /* ... */ }
     void draw() override { /* ... */ }
 };
 std::unique_ptr<Widget> makeWidget(WidgetConfig const &cfg) {
@@ -259,7 +264,7 @@ std::unique_ptr<Widget> makeWidget(WidgetConfig const &cfg) {
 }
 ```
 
-Prefer this over classic value-semantic PIMPL when you also want a test fake or a
+Prefer this over classic value-semantic PIMPL since it allows a test fake or a
 second backend later; plain PIMPL gives *only* the compile firewall, no seam.
 
 **Command/callback pairs (Api / Spi).** For a subsystem with inversion of
