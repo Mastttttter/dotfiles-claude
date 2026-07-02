@@ -10,6 +10,11 @@
     "ANTHROPIC_DEFAULT_MODEL": "qwen3.6-35b-a3b-aggressive",
     "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000"
   },
+  "attribution": {
+    "commit": "Co-Authored-By: Qwen3.6-35B <noreply@alibaba.com>",
+    "pr": "",
+    "sessionUrl": false
+  },
   "skipAutoPermissionPrompt": false,
   "voiceEnabled": false,
   "remoteControlAtStartup": false

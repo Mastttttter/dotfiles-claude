@@ -8,6 +8,11 @@
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "anthropic/claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "anthropic/claude-opus-4-7"
   },
+  "attribution": {
+    "commit": "Co-Authored-By: Claude Sonnet 4.6 via OpenRouter <noreply@openrouter.ai>",
+    "pr": "",
+    "sessionUrl": false
+  },
   "skipAutoPermissionPrompt": false,
   "voiceEnabled": false,
   "remoteControlAtStartup": false

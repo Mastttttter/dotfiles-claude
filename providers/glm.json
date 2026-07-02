@@ -9,6 +9,11 @@
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5.2[1m]",
     "ANTHROPIC_DEFAULT_MODEL": "glm-5.2[1m]"
   },
+  "attribution": {
+    "commit": "Co-Authored-By: GLM-5.2 <noreply@z.ai>",
+    "pr": "",
+    "sessionUrl": false
+  },
   "skipAutoPermissionPrompt": false,
   "voiceEnabled": false,
   "remoteControlAtStartup": false

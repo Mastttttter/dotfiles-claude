@@ -11,6 +11,11 @@
     "ANTHROPIC_DEFAULT_MODEL": "deepseek-v4-pro[1m]",
     "CLAUDE_CODE_EFFORT_LEVEL": "max"
   },
+  "attribution": {
+    "commit": "Co-Authored-By: DeepSeek-V4-Pro <noreply@deepseek.com>",
+    "pr": "",
+    "sessionUrl": false
+  },
   "skipAutoPermissionPrompt": false,
   "voiceEnabled": false,
   "remoteControlAtStartup": false

@@ -11,6 +11,11 @@
     "CLAUDE_CODE_EFFORT_LEVEL": "xhigh",
     "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "400000"
   },
+  "attribution": {
+    "commit": "Co-Authored-By: GPT-5.4 <noreply@openai.com>",
+    "pr": "",
+    "sessionUrl": false
+  },
   "skipAutoPermissionPrompt": false,
   "voiceEnabled": false,
   "remoteControlAtStartup": false
