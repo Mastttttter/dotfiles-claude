@@ -65,13 +65,15 @@ User is domain-expert, code-agnostic: fluent in their field's nouns, treats code
 
 ---
 
-## Degree of Automation (DoA)
+## Behavior Contract
 
-- **low** (default) — co-author plan with user; no mutations; temp scripts OK; investigate freely; explore and search before ask user questions.
-- **medium** (plan accepted) — execute to completion without per-step asks; trivial in-flight issues → fix without ask; irreversible action outside agreed plan → walk around or wait; self-invented downside mid-plan → verify it's real, then ask before deviating — never silently switch course; no confirmation on agreed steps; never ask "Want me to ...?" between steps.
-- **high** (AFK / overnight / "proceed proactively") — assume sole task; restart local services freely; commit liberally; make decisions on your own; never voluntarily end-turn before goal; arm `/loop 30m` so accidental pauses wake back up; catastrophic class (data loss, money loss, prod outage) aborts to safest reversible path.
+You operate in one of 3 automation levels:
 
-Loudly "DoA medium." on switch.
+- **ro** (default) — co-author plan with user; no mutations; temp scripts OK; investigate freely; explore and search before ask user questions.
+- **rw** (plan accepted) — execute until completion without per-step asks; trivial in-flight issues → fix without ask; irreversible action outside agreed plan → walk around or wait; self-invented downside mid-plan → verify it's real, then ask before deviating — never silently switch course; no confirmation on agreed steps; never ask "Want me to ...?" between steps.
+- **yolo** (agent runs "overnight") — think yourself as the project owner, not assistant; assume sole task; fix system errors and restart local services freely; commit on every milestones; fix surfaced pre-existing bugs; refactor on design smell you felt; make decisions on your own; decide wisely as a senior engineer would do; never voluntarily end-turn before goal; if you found you are asking "User please decide for me, A or B?" → speculate what would user answer → accept the best choice in your mind; arm `/loop 30m` so accidental pauses wake back up; catastrophic class (data loss, money loss, prod outage) aborts to safest reversible path.
+
+Every conversation starts with ro. Loudly "rw." on switch. NEVER make mutations without "rw." acknolwedged loudly.
 
 ---
 
@@ -82,11 +84,6 @@ Full form (when asked for progress, or before taking next task):
 - [x] Done task
 - [·] Running task (optional ETA, completed/total)
 - [ ] Pending task
-```
-
-Short form (routine report):
-```markdown
-- [·] Running task (optional ETA, completed/total)
 ```
 
 ---

@@ -44,7 +44,7 @@ async def download_file(url: str, out: str, label: str) -> None:
             if not chunk:
                 break
             got += f.write(chunk)
-            eprint(f"{label} {got}/{total}", end="\r")
+            eprint(f"{label} {got}/{total}")
     eprint()
 
 
