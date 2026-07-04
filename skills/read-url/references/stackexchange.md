@@ -19,6 +19,17 @@ The `site=` query string uses short names, not full domains:
 
 Full list: `curl -sL 'https://api.stackexchange.com/2.3/sites?pagesize=500' | jq -r '.items[] | "\(.api_site_parameter)\t\(.site_url)"'` — this counts against the quota too; cache locally if repeating.
 
+## Search
+
+Full-text search returns matching question IDs + titles:
+
+```bash
+curl -sL "https://api.stackexchange.com/2.3/search/advanced?site=<site>&q=<query>&order=desc&sort=votes" \
+  | jq -r '.items[] | "\(.question_id)  \(.score)  \(.title)"'
+```
+
+`intitle=<q>` restricts to title matches; `tagged=<tag>` filters by tag. Resolve `question_id` from a hit, then fetch answers as below.
+
 ## Question ID from URL
 
 URLs look like `https://<site>/questions/<id>/<slug>` — strip everything except `<id>`.

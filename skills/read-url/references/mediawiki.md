@@ -42,6 +42,23 @@ The REST API and TextExtracts aren't installed. Fall through these in order:
    npx defuddle parse 'https://en.cppreference.com/w/cpp/container/vector' --markdown
    ```
 
+## Searching (don't guess URLs)
+
+MediaWiki exposes a search API at `api.php` — no need to fabricate a page URL and hope. Two endpoints:
+
+```bash
+# Title-prefix autocomplete (the search-box "did you mean" suggestions)
+curl -sL '<wiki>/api.php?action=opensearch&search=<q>&limit=10&format=json' | jq -c '.[1]'
+
+# Full-text ranked search with snippets
+curl -sL '<wiki>/api.php?action=query&list=search&srsearch=<q>&srprop=snippet&srlimit=5&format=json' \
+  | jq -r '.query.search[] | "\(.title)  —  \(.snippet | gsub("<[^>]*>"; ""))"'
+```
+
+`opensearch` covers prefix and typo-style matches; `list=search` ranks pages by relevance and returns snippets, so loose phrases resolve correctly (e.g. `blue baby` → the `???` character on the Isaac wiki). Both work on Wikimedia-run and third-party installs.
+
+**Practical loop for any MediaWiki site**: search first → pick the canonical title from the results → fetch it via step 1 (`?action=raw`) or step 2 (`api.php?action=parse`). No fabricated URLs, no 404s.
+
 ## Notable wikis
 
 Covered by this reference — the URL/API patterns are all the same, just vary in which step (1 / 2 / 3) works best:

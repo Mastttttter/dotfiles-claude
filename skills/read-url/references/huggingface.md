@@ -22,6 +22,15 @@ curl -sL 'https://huggingface.co/api/papers/<arxiv>' | jq   # paper title, autho
 
 The `papers` endpoint takes an arXiv ID (e.g. `2402.19173`) and returns HF's curated paper page — useful when a paper has an associated model or dataset on HF.
 
+## Search
+
+```bash
+curl -sL 'https://huggingface.co/api/models?search=<q>&sort=downloads&direction=-1' | jq '.[] | {id, downloads, likes}'
+curl -sL 'https://huggingface.co/api/datasets?search=<q>'                           | jq '.[] | {id, downloads}'
+```
+
+Returns ranked `id`s — fetch the README/metadata for a chosen one as above.
+
 ## Gated models
 
 Some repos (Meta Llama, Google Gemma, etc.) require authentication. Any request to their raw files or sometimes the API returns:

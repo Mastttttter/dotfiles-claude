@@ -37,6 +37,15 @@ The GitHub search API requires `is:issue` or `is:pull-request` in the query — 
 
 Modern gh (≥2.6) also has `gh search issues <query>` / `gh search prs <query>` — same underlying API, cleaner output.
 
+## Search code / repositories
+
+```bash
+curl -sL 'https://api.github.com/search/repositories?q=<query>&sort=stars' | jq '.items[] | {full_name, description, stargazers_count}'
+curl -sL 'https://api.github.com/search/code?q=<query>'                    | jq '.items[] | {repository: .repository.full_name, path}'
+```
+
+`gh search repos <query>` / `gh search code <query>` do the same. Repository search is fully anonymous; code search works anonymously but is heavily rate-limited (~10/min) and best run with a token.
+
 ## Repo / gist metadata
 
 ```bash
