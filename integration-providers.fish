@@ -2,11 +2,8 @@
 # more of the corresponding API keys set in your environment:
 #   ZAI_API_KEY        → glm     (Zhipu BigModel)
 #   DEEPSEEK_API_KEY   → deepseek
-#   OPENROUTER_API_KEY → openrouter
 #   OFOX_API_KEY       → ofox    (OfoxAI aggregator, Gemini 3.1 pro
 #   LLAMA_API_KEY      → qwen
-#   (none)             → gpt     (Codex OAuth — needs CLIProxyAPI running
-#                                 locally; see https://github.com/router-for-me/CLIProxyAPI)
 #
 # Each shortcut routes claude through ~/.claude/providers/<name>.json which
 # rebinds ANTHROPIC_BASE_URL and the haiku/sonnet/opus model aliases to the
@@ -19,15 +16,10 @@ function claude-with
             set -fx ANTHROPIC_AUTH_TOKEN $ZAI_API_KEY
         case deepseek
             set -fx ANTHROPIC_AUTH_TOKEN $DEEPSEEK_API_KEY
-        case openrouter
-            set -fx ANTHROPIC_AUTH_TOKEN $OPENROUTER_API_KEY
         case ofox
             set -fx ANTHROPIC_AUTH_TOKEN $OFOX_API_KEY
         case qwen
             set -fx ANTHROPIC_AUTH_TOKEN $LLAMA_API_KEY
-        case gpt
-            # CLIProxyAPI: Codex OAuth backend, no real token needed.
-            set -fx ANTHROPIC_AUTH_TOKEN sk-cpa-local
         case '*'
             echo "claude-with: unknown provider '$provider'" >&2
             return 1
@@ -43,18 +35,10 @@ function deepseek
     claude-with deepseek $argv
 end
 
-function openrouter
-    claude-with openrouter $argv
-end
-
 function ofox
     claude-with ofox $argv
 end
 
 function qwen
     claude-with qwen $argv
-end
-
-function gpt
-    claude-with gpt $argv
 end

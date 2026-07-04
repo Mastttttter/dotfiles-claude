@@ -70,7 +70,7 @@ case "${ans:-y}" in
     *)           echo "  ${YELLOW}skipped core integration${RESET}" ;;
 esac
 
-read -r -p "Add provider shortcuts (glm/deepseek/qwen/openrouter/ofox/gpt)? [y/N] " ans
+read -r -p "Add provider shortcuts (glm/deepseek/qwen/ofox)? [y/N] " ans
 case "${ans:-n}" in
     y|Y|yes|YES) ensure_line "$rc" "$provider_line" "provider shortcuts" ;;
     *)           echo "  ${YELLOW}skipped provider shortcuts${RESET}" ;;
