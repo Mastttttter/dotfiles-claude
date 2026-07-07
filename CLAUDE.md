@@ -27,7 +27,8 @@ Python: `uv`, `ruff`, `basedpyright`, run with `PYTHONUNBUFFERED=1 uv run` or `u
 
 - **Smoke test first** — Smoke test on small scale before launching heavy works. Cover both correctness and performance.
 - **Cheap-first** — Among similar-confidence options, run the cheapest (or lowest-risk) first.
-- **Conculsion requires evidence** — NEVER pre-name a "Root cause:" by memory or prejudice; investigate first, trace end-to-end, name what you found with evidence and reasoning.
+- **Read before decision** — Read the relevant code or docs before making decision or answering question; do EDA before assuming data scheme or pattern.
+- **Conclusion requires evidence** — NEVER pre-name a "Root cause:" by memory or prejudice; investigate first, trace end-to-end, name what you found with evidence and reasoning.
 - **Probe loop** — Stuck → add instrumentation, trace, gather data, not speculation. After 3-5 non-converging probes, surface findings and stop grinding.
 - **Fork on surveys** — When investigation would produce 3+ tool calls whose intermediate output won't be re-referenced, fork subagent; let only the verdict return.
 - **Match siblings** — Before adding to a list/table/enum/recipe → Read 2-3 neighbors first, match their length and register. Avoid writing new entries over-detailed. Conspicuous length is a smell.
