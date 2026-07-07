@@ -405,11 +405,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/inject-time.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
             "command": "bash ~/.claude/hooks/inject-git-status.sh",
             "timeout": 5
           },
