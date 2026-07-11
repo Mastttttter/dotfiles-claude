@@ -30,7 +30,7 @@ compatibilty: Claude Code
 
 - Short tasks (<2 minutes): run in Bash directly
 - Interactive commands: use `/tmux` instead
-- IO-bound polling loops: babysit's scheduler does not help
+- IO-bound tasks (e.g. web servers, async loops): babysit's scheduler won't help
 - Lightweight (low CPU + low memory) tasks fine to die with Claude: Bash `run_in_background: true`
 
 ## Hard Guardrail — Don't Bypass
