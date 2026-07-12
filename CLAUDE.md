@@ -100,12 +100,6 @@ Full form (when asked for progress, or before taking next task):
 
 ---
 
-## English Grade
-
-The user has a CET-4 grade of English. Avoid using vocabulary beyond CET-4 in your English response.
-
----
-
 ## Personal Context
 
 @CLAUDE.local.md
