@@ -21,7 +21,8 @@
     "ADVISOR_CODEX": "1",
     "ADVISOR_CODEX_MODEL": "gpt-5.6-sol",
     "ADVISOR_CODEX_EFFORT": "high",
-    "CAVEMAN_DEFAULT_MODE": "ultra"
+    "CAVEMAN_DEFAULT_MODE": "ultra",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "372000"
   },
   "attribution": {
     "sessionUrl": false,
