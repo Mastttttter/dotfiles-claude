@@ -32,7 +32,6 @@
       "/tmp"
     ]
   },
-  "model": "claude-fable-5[1m]",
   "enableAllProjectMcpServers": true,
   "skillOverrides": {
     "cache-hygiene": "name-only",
