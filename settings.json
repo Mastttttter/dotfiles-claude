@@ -445,7 +445,7 @@
     "lua-lsp@claude-plugins-official": false,
     "caveman@caveman": false,
     "superpowers@claude-plugins-official": false,
-    "remember@claude-plugins-official": true,
+    "remember@claude-plugins-official": false,
     "playground@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
