@@ -13,7 +13,7 @@
     "CLAUDE_AUTO_BACKGROUND_TASKS": "1",
     "CLAUDE_CODE_NEW_INIT": "1",
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
-    "AUDIT_BACKEND": "codex",
+    "AUDIT_BACKEND": "none",
     "AUDIT_CODEX_MODEL": "gpt-5.6-luna",
     "AUDIT_CODEX_EFFORT": "medium",
     "AUDIT_CLAUDE_MODEL": "haiku",
@@ -32,6 +32,7 @@
       "/tmp"
     ]
   },
+  "model": "fable",
   "enableAllProjectMcpServers": true,
   "skillOverrides": {
     "cache-hygiene": "name-only",
@@ -482,7 +483,7 @@
   },
   "viewMode": "default",
   "effortLevel": "xhigh",
-  "advisorModel": "opus",
+  "advisorModel": "fable",
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,
   "tui": "fullscreen",

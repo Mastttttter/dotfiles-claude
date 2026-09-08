@@ -17,7 +17,7 @@ ultraclaude() {
 }
 
 fable() {
-    claude --model 'claude-fable-5' $argv
+    claude --model 'claude-fable-5-1[1m]' $argv
 }
 
 opus() {

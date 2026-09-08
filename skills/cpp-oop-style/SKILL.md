@@ -6,8 +6,10 @@ description: >-
   refactoring, or reviewing C++ code (.cpp / .h / .hpp / .cc / .cxx), designing
   C++ classes, interfaces, APIs, or libraries, or when the user mentions C++
   design, OOP, design patterns, dependency injection, RAII, or "clean / modern
-  C++". Apply it even when the user does not explicitly ask for a style: the
-  default way models write C++ leans on free functions, public mutable state,
+  C++". Also use it for CMake-first C++ project layout, module targets, usage
+  requirements, and dependency wiring. Apply it even when the user does not
+  explicitly ask for a style: the default way models write C++ leans on free
+  functions, public mutable state,
   raw new/delete, sentinel return codes, and long loose parameter lists — this
   skill replaces all of that with abstract-class-or-data-class design,
   dependency injection, type-rich APIs, value-based error handling, and RAII
@@ -61,7 +63,7 @@ Everything else is behavior behind an interface, or data in a struct.
 | `int parseInt()` returning `-1` on failure | `optional<int> parseInt()` |
 | `enum Mode` + `switch` dispatch | inject a strategy / functor, or a state class |
 | `pair<bool, It>` / `tuple<...>` returns | named result struct |
-| `const T&`, `const T*` | East const: `T const &`, `T const *` |
+| `const T& x`, `const T* p` | East const: `T const &x`, `T const *p` |
 
 ## Named anti-patterns (real smells this overrides)
 
@@ -329,6 +331,28 @@ for subsystems that are truly one-per-process.
   pointers (`Dep *`) or references; the injectee never owns its collaborators.
   Ownership lives in the composition root. (See `references/ownership-lifetime.md`.)
 
+## CMake-first project structure
+
+- **Make the target graph mirror the module graph.** Give each architectural
+  module its own directory, `CMakeLists.txt`, and library target; let executable
+  targets be composition roots that link those modules.
+- **Keep public structure explicit.** Put exported headers under
+  `include/<module>/`, implementations under `src/`, include them as
+  `<module/Foo.h>`, and use the module name as the C++ namespace.
+- **Attach requirements to the target that owns them.** Sources, include paths,
+  definitions, options, and dependencies use `target_*`; choose `PRIVATE`,
+  `PUBLIC`, or `INTERFACE` from whether consumers need the requirement.
+- **Prefer an `OBJECT` library for an internal module folded into final products
+  in one build tree.** Multiple in-tree apps, tests, or probes do not require an
+  archive. Use `STATIC` or `SHARED` when the library is itself a deliberate
+  archive, runtime, ABI, installation, or deployment boundary.
+- **Wire third-party code through imported targets.** Prefer
+  `find_package(... CONFIG ...)` and `Package::component`; keep machine-specific
+  package locations in configure-time cache inputs rather than project files.
+
+Read `references/cmake-first-projects.md` before creating or restructuring a
+CMake C++ project, changing module targets, or deciding dependency visibility.
+
 ## Type-rich data classes
 
 Make illegal states unrepresentable and make call sites self-documenting. The
@@ -422,6 +446,42 @@ compiler is your reviewer.
   return `T const` by value for the same reason.
 - **Reserve `mutable` only for logical constness**, such as a cache or mutex that
   does not change the observable value. Never for hiding ordinary state changes.
+
+## Signature clarity
+
+Function signatures should be self-explained. An interface should convey its expected behavior from its declaration. A function should explain its purpose solely from name and types without ambiguity.
+
+**Why:** when writing code, reading the header can explains the expected behavior for most trivial functions.
+
+Use a name telling full story e.g. `Process::isRunning()` instead of `Process::check()`, unless the class already locks the context e.g. `OutOfOrderChecker::check()`.
+
+Avoid ambiguious function and class names, rename them immediately once you flag one.
+
+**Why:** a confusing interface name may confuse future agents to risk misuse them.
+
+When there are ambiguity of generic type in argument, define and use type-rich classes `sleep(Duration const &)`, `findByName(Name const &)`.
+
+When there are multiple argument whose order and meaning are ambiguious, use `fill(Rect const &)` and invoke with `Rect{...}`.
+
+**Why:** saves future agent from drifting type semantics during refactor.
+
+## Duty class
+
+Keep class interface small and orthogonal. Alert god-class tendency. When a class is piling too many methods and can be classified into orthogonal categories, consider breakdown heavy duty cluster into duty class.
+
+E.g. `std::unique_ptr<Painter> Canvas::getPainter()` + `Painter::fill(Path const &, Brush const &)` + `Painter::stroke(Path const &, Pen const &)`. Here `Painter` can be another abstract class, and `Canvas` implements `Paintable` which requires `Paintable::getPainter()`. `Canvas.cpp` can implement that as `CanvasPainter` privately using anonymous namespace (a typical implementation can holds a `Canvas *` pointer). This keeps the `Canvas` interface stay focused, also reserve for future `Paintable` implementations.
+
+**Why:** programmers and LLMs works better when knowledge is progressively disclosed. Reading a god-class floods context by side-cars unrelevant to the goal. So keep interface small and hierarchy to avoid dilution.
+
+## Don't repeat yourself
+
+When there are more than 2~3 paths sharing common pattern or concept: extract into abstracted class. E.g. `Path` for `Line`, `Arc`, `Bezier`; `Brush` for `Color`, `Gradient`; saves `fill()` from combination hell.
+
+Two approaches to abstraction:
+- Potentially vast expansion in future -> **Dynamic polymorphism**: `Path` as abstract class; pointer semantics; pass as `Path const &` (or `Path *` if mutable); return and store as `std::unique_ptr<Path>`.
+- Fixed types, likely won't expand -> **Static polymorphism**: `Brush` as a data-class wrapped `std::variant`; value semantics; pass as `Brush const &`; return and store as `Brush`.
+
+Avoid using function overload and templates for polymorphism unless the context is metaprogramming or performance.
 
 ## Boolean expression style
 
@@ -690,10 +750,10 @@ This is a style for code that must live and change. Don't weaponize it:
   inner loop it is even fine to drop OOP entirely — raw intrinsics, free
   functions, value-semantic SIMD wrappers — provided every such kernel is paired
   with a reference-checked test and a benchmark. Performance you can't measure is
-  not a reason to abandon the style.
+  not a reason to abandon the style. (See `$cpp-hpc-optimization`.)
 - **`shared_ptr` vs `unique_ptr`:** prefer a single clear owner (`unique_ptr`,
-  or a process-lifetime raw owning pointer for singletons); reach for
-  `shared_ptr` only when ownership is genuinely shared.
+  or a process-lifetime raw owning pointer for singletons); reach for `shared_ptr`
+  only when ownership is genuinely shared.
 
 ## Exemplar libraries — good API to imitate
 
@@ -750,6 +810,17 @@ You MUST proactively load these when the task touches their area:
 - `references/decoupled-modules.md` — definite computation vs tacit I/O or GUI
   boundaries, interface seams, agent-operable harnesses, and integration gates.
   Load me before decomposing a new C++ project or multi-module architecture.
+- `references/cmake-first-projects.md` — course-derived CMake-first directory
+  layout, target kinds, usage requirements, source discovery, third-party
+  dependencies, and embeddable subprojects. Load me before creating or
+  restructuring CMake C++ targets or dependency wiring.
+- `references/debug-instrumentation.md` — discriminating state capture, mature
+  logging backends, stable instrument keys, JSONL, and bounded hot-path probes.
+  Load me before adding or structuring temporary diagnostic logs.
+- `references/debug-harnesses.md` — minimal harnesses, application or GDB REPLs,
+  durable developer surfaces, customer diagnostics, live calibration, and fast
+  diagnostic builds. Load me when debugging needs controllable execution or when
+  designing persistent development and support controls.
 - `references/ownership-lifetime.md` — no raw `new`, smart pointers vs `vector`,
   references vs pointers, RAII for C resources, the rule of five, dangling
   temporaries. Load me before smart pointers, or resource management design.

@@ -62,6 +62,9 @@
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
 
+# work skills — this repo is public, these reference private company code
+/skills/ashare-hft-checklist
+
 # archibate personal skills
 /skills/adb-wireless
 /skills/bilibili-mp3
