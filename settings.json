@@ -18,9 +18,6 @@
     "AUDIT_CODEX_EFFORT": "medium",
     "AUDIT_CLAUDE_MODEL": "haiku",
     "AUDIT_CLAUDE_EFFORT": "high",
-    "ADVISOR_CODEX": "1",
-    "ADVISOR_CODEX_MODEL": "gpt-5.6-sol",
-    "ADVISOR_CODEX_EFFORT": "high",
     "CAVEMAN_DEFAULT_MODE": "ultra"
   },
   "attribution": {
@@ -32,16 +29,21 @@
       "/tmp"
     ]
   },
-  "model": "fable",
+  "model": "opus",
   "enableAllProjectMcpServers": true,
   "skillOverrides": {
-    "cache-hygiene": "name-only",
     "init": "user-invocable-only",
     "security-review": "user-invocable-only",
     "fewer-permission-prompts": "user-invocable-only",
     "claude-api": "user-invocable-only",
     "keybindings-help": "user-invocable-only",
-    "schedule": "user-invocable-only"
+    "schedule": "user-invocable-only",
+    "design": "user-invocable-only",
+    "frontend-design": "user-invocable-only",
+    "bilibili-api": "user-invocable-only",
+    "gemini-media": "user-invocable-only",
+    "docx": "user-invocable-only",
+    "pdf": "user-invocable-only"
   },
   "hooks": {
     "PreToolUse": [
@@ -191,26 +193,6 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/no-pip-npm.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "TaskOutput",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/task-output-timeout-cap.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "ScheduleWakeup",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/no-schedule-wakeup-deadzone.sh",
             "timeout": 5
           }
         ]
@@ -447,7 +429,7 @@
     "caveman@caveman": false,
     "superpowers@claude-plugins-official": false,
     "remember@claude-plugins-official": false,
-    "playground@claude-plugins-official": true
+    "playground@claude-plugins-official": false
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
