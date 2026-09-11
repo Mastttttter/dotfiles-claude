@@ -79,19 +79,6 @@ assert_deny_env() {
   fi
 }
 
-assert_context_env() {
-  local name="$1" input="$2" pattern="$3" env_name="$4" env_value="$5"
-  local out
-  out=$(printf '%s' "$input" | env "$env_name=$env_value" bash ~/.claude/hooks/$name.sh 2>&1)
-  if ! echo "$out" | jq -e ".hookSpecificOutput.additionalContext | contains(\"$pattern\")" > "$test_out"; then
-    echo "FAIL: $name should emit additionalContext containing '$pattern' with $env_name=$env_value"
-    echo "  got: $out"
-    fail=1
-  else
-    echo "OK:   $name context ($pattern, $env_name=$env_value)"
-  fi
-}
-
 test_out=$(mktemp)
 
 echo "=== PreToolUse no-* hooks ==="
