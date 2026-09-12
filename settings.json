@@ -38,12 +38,7 @@
     "claude-api": "user-invocable-only",
     "keybindings-help": "user-invocable-only",
     "schedule": "user-invocable-only",
-    "design": "user-invocable-only",
-    "frontend-design": "user-invocable-only",
-    "bilibili-api": "user-invocable-only",
-    "gemini-media": "user-invocable-only",
-    "docx": "user-invocable-only",
-    "pdf": "user-invocable-only"
+    "design": "user-invocable-only"
   },
   "hooks": {
     "PreToolUse": [
