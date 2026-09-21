@@ -3,7 +3,6 @@
 #   ZAI_API_KEY        → glm     (Zhipu BigModel)
 #   DEEPSEEK_API_KEY   → deepseek
 #   OFOX_API_KEY       → ofox    (OfoxAI aggregator, Gemini 3.1 pro)
-#   LLAMA_API_KEY      → qwen
 #
 # Each shortcut routes claude through ~/.claude/providers/<name>.json which
 # rebinds ANTHROPIC_BASE_URL and the haiku/sonnet/opus model aliases to the
@@ -23,9 +22,6 @@ claude-with() {
         ofox)
             token="$OFOX_API_KEY"
             ;;
-        qwen)
-            token="$LLAMA_API_KEY"
-            ;;
         *)
             echo "claude-with: unknown provider '$provider'" >&2
             return 1
@@ -44,8 +40,4 @@ deepseek() {
 
 ofox() {
     claude-with ofox "$@"
-}
-
-qwen() {
-    claude-with qwen "$@"
 }

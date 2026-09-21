@@ -14,7 +14,7 @@ function ultraclaude
 end
 
 function fable
-    claude --model 'claude-fable-5' $argv
+    claude --model 'claude-fable-5-1[1m]' $argv
 end
 
 function opus

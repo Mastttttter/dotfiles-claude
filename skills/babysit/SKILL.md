@@ -100,6 +100,7 @@ babysit log --follow --name="<unique-name>"   # stream; use with run_in_backgrou
 babysit list                           # running/pending + terminal ended within 24h; --all for full history
 babysit status --name="<name>"         # one task, JSON
 babysit kill --name="<name>"           # SIGTERM, then scope-stop fallback
+babysit pause --name="<name>"          # freeze the tree; clock and watchdogs skip the frozen window (`resume` to thaw)
 babysit adjust --name="<name>" --estimated_mem_bytes=32G  # retune estimated peak memory
 ```
 

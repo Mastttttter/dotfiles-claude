@@ -112,6 +112,15 @@ babysit adjust --name="<task name>" --estimated_mem_bytes=32G --estimated_cpu_co
 
 > `adjust` rewrites the task's `estimated_mem_bytes` / `estimated_cpu_cores` in the DB and, if the task is running, swaps the value into the in-memory `RunningTask` and resets the 2×-sustained overrun counter so the kill threshold restarts against the new estimate. Use after a `runaway_risk` warning when you've decided the new actual is acceptable and want to widen the kill cap (or, conversely, tighten it on a task you no longer trust). The cgroup `memory.max` set at launch (= `min(3 × estimate, mem_pct_limit × total_ram)`) is NOT re-applied to the running scope — re-queue if you need a tighter hard cap. Admission accounting for running tasks uses live RSS rather than the stored estimate, so adjusting a running task only retunes the kill threshold; it doesn't free admission headroom for new tasks. For pending tasks, the adjusted estimate is reflected in the next `_capacity_check`.
 
+To park a running task without losing its progress:
+
+```bash
+babysit pause --name="<task name>"
+babysit resume --name="<task name>"
+```
+
+> `pause` freezes the task's whole process tree through the cgroup v2 freezer (`cgroup.freeze`), which catches every descendant atomically — unlike `SIGSTOP` on the leader PID, which misses children. The frozen window is excluded from `elapsed_time`, so `--kill_timeout`, the `runaway_risk` elapsed warning, and the observability watchdog all ignore it; `resume` rebases the log-mtime and CPU-delta baselines and clears the overrun streaks so the first tick after thaw can't trigger a stall kill. A paused task shows `paused: true` with `status` still `running`. It keeps its full RSS, so it still counts against admission capacity and stays in the victim ranking for `system_mem_pressure` — pausing parks the clock, not the memory. `kill` on a paused task thaws first so SIGTERM is actually handled.
+
 To subscribe for log update, run with `run_in_background=true` + `Monitor`:
 
 ```bash
@@ -121,7 +130,7 @@ babysit log --follow --name="<task name>"
 you will be notified on log update.
 
 
-For humans only (do not invoke from an agent), there is a `babysit tui` dashboard built on `textual` that renders the task list with live progress, sortable resource columns, log peek, and confirm-to-kill. Agent-facing subcommands above remain the API surface.
+For humans only (do not invoke from an agent), there is a `babysit tui` dashboard built on `textual` that renders the task list with live progress, sortable resource columns, log peek, `p` to pause/resume, and confirm-to-kill. Agent-facing subcommands above remain the API surface.
 
 
 To purge stale finished tasks and their logs:

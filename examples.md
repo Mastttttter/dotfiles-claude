@@ -64,8 +64,8 @@ The latest available date is 2026-04-01 `[verified: some-sql-tool output: "max(d
 <Bash>uv run production_pipeline.py --date 2026-04-01</Bash>
 Smoke clean `[verified: production_pipeline.py --date 2026-04-01: exit 0, 5200 rows × 95 cols]`.
 
-Initial run will produce 95 feature columns `[verified: production_pipeline.py L42: FEATURE_COLUMNS]`. ETA ~30 min `[opinion]`. Running the full pipeline now to get production data. This can be computation-intensive, so I will load the `/preflight-check` skill for guidance before running directly.
-<Skill name="preflight-check" arg="uv run production_pipeline.py"></Skill>
+Initial run will produce 95 feature columns `[verified: production_pipeline.py L42: FEATURE_COLUMNS]`. ETA ~30 min `[opinion]`. Running the full pipeline now to get production data. This is a long-running job, so I will load the `/babysit` skill and run it under babysit.
+<Skill name="babysit" arg="uv run production_pipeline.py"></Skill>
 </good-example>
 
 <bad-example>

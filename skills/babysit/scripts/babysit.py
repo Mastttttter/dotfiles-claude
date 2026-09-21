@@ -86,7 +86,7 @@ STATUSES = ("pending", "running", "completed", "failed", "killed", "unknown")
 TERMINAL = {"completed", "failed", "killed", "unknown"}
 
 SPEC_COLUMNS = (
-    "name", "pid", "status", "kill_reason", "kill_hint", "kill_detail", "exit_code", "command",
+    "name", "pid", "status", "paused", "kill_reason", "kill_hint", "kill_detail", "exit_code", "command",
     "elapsed_time", "estimated_time", "kill_timeout", "observability_interval",
     "last_observed_log", "time_since_last_observe",
     "cpu_cores", "cpu_pct", "estimated_cpu_cores",
@@ -209,6 +209,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at REAL NOT NULL,
     started_at REAL,
     ended_at REAL,
+    paused_at REAL,
+    paused_total REAL NOT NULL DEFAULT 0,
     exit_code INTEGER,
     kill_reason TEXT,
     log_path TEXT NOT NULL,
@@ -234,6 +236,10 @@ def open_db() -> sqlite3.Connection:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()}
     if "kill_detail" not in cols:
         conn.execute("ALTER TABLE tasks ADD COLUMN kill_detail TEXT")
+    if "paused_at" not in cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN paused_at REAL")
+    if "paused_total" not in cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN paused_total REAL NOT NULL DEFAULT 0")
     return conn
 
 
@@ -344,12 +350,8 @@ def stop_scope(scope_unit: str) -> None:
         )
 
 
-def cgroup_oom_killed(scope_unit: str) -> bool:
-    """Return True iff the scope's cgroup has a non-zero oom_kill counter.
-
-    Must be called BEFORE `stop_scope` — systemd-run --collect removes the
-    cgroup on stop, taking memory.events with it.
-    """
+def scope_cgroup(scope_unit: str) -> Path | None:
+    """Absolute cgroup v2 directory of a live scope, or None if it's gone."""
     try:
         r = subprocess.run(
             ["systemctl", "--user", "show", scope_unit,
@@ -357,10 +359,42 @@ def cgroup_oom_killed(scope_unit: str) -> bool:
             env=_systemd_env(),
             capture_output=True, text=True, timeout=2,
         )
-        cgroup_rel = r.stdout.strip()
-        if not cgroup_rel:
+    except Exception:
+        return None
+    rel = r.stdout.strip()
+    if not rel:
+        return None
+    path = Path(f"/sys/fs/cgroup{rel}")
+    return path if path.is_dir() else None
+
+
+def freeze_scope(scope_unit: str, frozen: bool) -> bool:
+    """Freeze or thaw a scope's whole process tree via the cgroup v2 freezer.
+
+    Freezing the cgroup catches every descendant atomically; SIGSTOP on the
+    leader PID would miss children and race the ones spawned mid-signal.
+    """
+    cg = scope_cgroup(scope_unit)
+    if cg is None:
+        return False
+    try:
+        (cg / "cgroup.freeze").write_text("1" if frozen else "0")
+    except OSError:
+        return False
+    return True
+
+
+def cgroup_oom_killed(scope_unit: str) -> bool:
+    """Return True iff the scope's cgroup has a non-zero oom_kill counter.
+
+    Must be called BEFORE `stop_scope` — systemd-run --collect removes the
+    cgroup on stop, taking memory.events with it.
+    """
+    try:
+        cg = scope_cgroup(scope_unit)
+        if cg is None:
             return False
-        events_path = Path(f"/sys/fs/cgroup{cgroup_rel}/memory.events")
+        events_path = cg / "memory.events"
         if not events_path.exists():
             return False
         for line in events_path.read_text().splitlines():
@@ -567,6 +601,8 @@ class RunningTask:
     started_at: float
     estimated_mem_bytes: int | None = None
     estimated_cpu_cores: float | None = None
+    paused_at: float | None = None      # None when running; freeze timestamp when paused
+    paused_total: float = 0.0           # seconds spent frozen, excluded from elapsed
     obs_violation_count: int = 0
     mem_overrun_count: int = 0
     cpu_overrun_count: int = 0
@@ -648,6 +684,10 @@ class Daemon:
                 except psutil.NoSuchProcess:
                     reason = "daemon_restart_dead"
             if reason is not None:
+                # Never leave a frozen cgroup behind: once the row is terminal
+                # no command can reach it, and `resume` needs a live RunningTask.
+                if r["paused_at"] and r["scope_unit"]:
+                    freeze_scope(r["scope_unit"], False)
                 self.db.execute(
                     "UPDATE tasks SET status='failed', kill_reason=?, ended_at=? WHERE name=?",
                     (reason, now(), name),
@@ -667,6 +707,8 @@ class Daemon:
                 started_at=started_at or now(),
                 estimated_mem_bytes=r["estimated_mem_bytes"],
                 estimated_cpu_cores=r["estimated_cpu_cores"],
+                paused_at=r["paused_at"],
+                paused_total=r["paused_total"] or 0.0,
             )
             # prime CPU baseline
             with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
@@ -826,6 +868,50 @@ class Daemon:
             return {"ok": False, "error": f"task {name!r} not running"}
         self._kill_task(name, reason="manual")
         return {"ok": True}
+
+    def _op_pause(self, req: dict) -> dict:
+        # Freeze the task's cgroup and stop its clock: elapsed, kill_timeout and
+        # the observability watchdog all skip the frozen window, so a task parked
+        # over a lunch break is not punished for a stall it did not choose.
+        name = req["name"]
+        rt = self.running.get(name)
+        if rt is None:
+            return {"ok": False, "error": f"task {name!r} not running"}
+        if rt.paused_at is not None:
+            return {"ok": False, "error": f"task {name!r} already paused"}
+        if not freeze_scope(rt.scope_unit, True):
+            return {"ok": False, "error": f"could not freeze cgroup of {name!r}"}
+        rt.paused_at = now()
+        self.db.execute("UPDATE tasks SET paused_at=? WHERE name=?", (rt.paused_at, name))
+        self.log(f"[{name}] paused (cgroup frozen)")
+        return {"ok": True, "name": name, "paused": True}
+
+    def _op_resume(self, req: dict) -> dict:
+        name = req["name"]
+        rt = self.running.get(name)
+        if rt is None:
+            return {"ok": False, "error": f"task {name!r} not running"}
+        if rt.paused_at is None:
+            return {"ok": False, "error": f"task {name!r} is not paused"}
+        if not freeze_scope(rt.scope_unit, False):
+            return {"ok": False, "error": f"could not thaw cgroup of {name!r}"}
+        paused_for = now() - rt.paused_at
+        rt.paused_total += paused_for
+        rt.paused_at = None
+        # Every watchdog baseline is stale by the whole frozen window: the log
+        # mtime, the CPU-time delta, and the overrun streaks. Restart them here
+        # or the first tick after thaw kills the task for a stall it never had.
+        rt.last_log_mtime = now()
+        rt.obs_violation_count = 0
+        rt.mem_overrun_count = 0
+        rt.cpu_overrun_count = 0
+        rt.prev_cpu_times = {}
+        self.db.execute(
+            "UPDATE tasks SET paused_at=NULL, paused_total=? WHERE name=?",
+            (rt.paused_total, name),
+        )
+        self.log(f"[{name}] resumed after {fmt_duration(paused_for)} paused")
+        return {"ok": True, "name": name, "paused": False}
 
     def _op_adjust(self, req: dict) -> dict:
         # Mutate a pending or running task's resource estimate. DB row is
@@ -1051,11 +1137,15 @@ class Daemon:
         else:
             for k in stat_keys:
                 d.setdefault(k, None)
-        # elapsed
+        # elapsed — the frozen window never counts, including the open one
+        d["paused"] = d.get("paused_at") is not None
+        paused_total = d.get("paused_total") or 0.0
+        if d.get("paused_at"):
+            paused_total += now() - d["paused_at"]
         if d.get("started_at") and not d.get("ended_at"):
-            d["elapsed_time"] = now() - d["started_at"]
+            d["elapsed_time"] = now() - d["started_at"] - paused_total
         elif d.get("started_at") and d.get("ended_at"):
-            d["elapsed_time"] = d["ended_at"] - d["started_at"]
+            d["elapsed_time"] = d["ended_at"] - d["started_at"] - paused_total
         else:
             d["elapsed_time"] = None
         # observability
@@ -1149,6 +1239,16 @@ class Daemon:
                               reason="adopted_exited")
                 return
 
+        # Paused: refresh stats for the display and the pressure reaper, then
+        # skip every rule. A frozen task cannot exit, log, or grow, so a probe
+        # failure here is transient noise — never a reason to finalize a task
+        # the user deliberately parked.
+        if rt.paused_at is not None:
+            result = probe_task(rt.pid, rt.prev_cpu_times)
+            if result is not None:
+                rt.last_stats, rt.prev_cpu_times = result
+            return
+
         result = probe_task(rt.pid, rt.prev_cpu_times)
         if result is None:
             rc = rt.popen.poll() if rt.popen else None
@@ -1176,7 +1276,7 @@ class Daemon:
                 self.log(f"[{name}] silent {fmt_duration(silent_for)} (> {fmt_duration(rt.obs_interval)}) — violation {rt.obs_violation_count}")
 
         # per-task rule enforcement (immediate kill per spec)
-        elapsed = now() - rt.started_at
+        elapsed = now() - rt.started_at - rt.paused_total
 
         # Agent-declared estimate enforcement (soft-then-hard).
         # Soft warning at 1× is emitted client-side by `babysit wait`; the daemon
@@ -1410,6 +1510,16 @@ class Daemon:
         rt = self.running.get(name)
         if rt is None:
             return
+        # A frozen cgroup never runs its SIGTERM handler, so the grace period
+        # would be 10s of dead waiting before the SIGKILL fallback. Thaw first.
+        if rt.paused_at is not None:
+            freeze_scope(rt.scope_unit, False)
+            rt.paused_total += now() - rt.paused_at
+            rt.paused_at = None
+            self.db.execute(
+                "UPDATE tasks SET paused_at=NULL, paused_total=? WHERE name=?",
+                (rt.paused_total, name),
+            )
         # SIGTERM, grace, then SIGKILL via scope stop. Two code paths:
         # owned (have Popen → can wait()) vs adopted (psutil + polling).
         if rt.popen is not None:
@@ -1904,6 +2014,29 @@ def cmd_kill(
     typer.echo(f"killed: {name}")
 
 
+@app.command("pause")
+def cmd_pause(
+    name: str = typer.Option(..., help="Task name."),
+) -> None:
+    """Freeze a running task's process tree and stop its clock.
+
+    Elapsed time, --kill_timeout and the observability watchdog all ignore the
+    frozen window. The task keeps its memory, so it still counts against
+    capacity and can still be picked by the system-pressure reaper.
+    """
+    rpc_call("pause", name=name)
+    typer.echo(f"paused: {name}")
+
+
+@app.command("resume")
+def cmd_resume(
+    name: str = typer.Option(..., help="Task name."),
+) -> None:
+    """Thaw a paused task and restart its clock and watchdog baselines."""
+    rpc_call("resume", name=name)
+    typer.echo(f"resumed: {name}")
+
+
 @app.command("adjust")
 def cmd_adjust(
     name: str = typer.Option(..., help="Task name."),
@@ -2030,7 +2163,7 @@ def cmd_tui(
 ) -> None:
     """Interactive dashboard for humans. Other subcommands are for agents.
 
-    Keys: ↑/↓ navigate · Enter open log · k kill · s sort · f filter · r refresh · q quit
+    Keys: ↑/↓ navigate · Enter open log · p pause/resume · k kill · s sort · f filter · r refresh · q quit
     Sorts cycle: started → cpu → mem → elapsed → silent → name. Running tasks float to top.
     """
     if not daemon_alive():
@@ -2189,6 +2322,7 @@ def cmd_tui(
         """
         BINDINGS = [
             Binding("q", "quit", "quit"),
+            Binding("p", "toggle_pause", "pause"),
             Binding("k", "kill_task", "kill"),
             Binding("enter", "open_log", "log"),
             Binding("s", "cycle_sort", "sort"),
@@ -2255,6 +2389,8 @@ def cmd_tui(
                 kr = r.get("kill_reason")
                 ec = r.get("exit_code")
                 status_cell = f"[{color}]{status}[/]"
+                if r.get("paused"):
+                    status_cell = "[yellow]paused[/]"
                 if kr:
                     status_cell += f" [dim]({kr})[/]"
                 elif status == "failed" and ec is not None:
@@ -2265,7 +2401,7 @@ def cmd_tui(
                 obs_int = r.get("observability_interval") or 0
                 if silent_secs is None:
                     silent_cell = "-"
-                elif silent_secs > obs_int and status == "running":
+                elif silent_secs > obs_int and status == "running" and not r.get("paused"):
                     silent_cell = f"[bold red]{fmt_duration(silent_secs)}[/]"
                 else:
                     silent_cell = fmt_duration(silent_secs)
@@ -2318,6 +2454,14 @@ def cmd_tui(
             self._tick()
 
         def action_refresh_now(self) -> None:
+            self._tick()
+
+        def action_toggle_pause(self) -> None:
+            t = self._current_task()
+            if not t or t["status"] != "running":
+                return
+            with contextlib.suppress(Exception):
+                rpc_call("resume" if t.get("paused") else "pause", name=t["name"])
             self._tick()
 
         def action_open_log(self) -> None:

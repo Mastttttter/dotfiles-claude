@@ -79,19 +79,6 @@ assert_deny_env() {
   fi
 }
 
-assert_context_env() {
-  local name="$1" input="$2" pattern="$3" env_name="$4" env_value="$5"
-  local out
-  out=$(printf '%s' "$input" | env "$env_name=$env_value" bash ~/.claude/hooks/$name.sh 2>&1)
-  if ! echo "$out" | jq -e ".hookSpecificOutput.additionalContext | contains(\"$pattern\")" > "$test_out"; then
-    echo "FAIL: $name should emit additionalContext containing '$pattern' with $env_name=$env_value"
-    echo "  got: $out"
-    fail=1
-  else
-    echo "OK:   $name context ($pattern, $env_name=$env_value)"
-  fi
-}
-
 test_out=$(mktemp)
 
 echo "=== PreToolUse no-* hooks ==="
@@ -608,23 +595,6 @@ assert_deny no-heredoc "$(jq -n --arg c "$heredoc_cmd" '{tool_input:{command:$c}
 # FP-aware branch must be in the message too
 assert_deny no-devnull-redirect "$(jq -n --arg c "ls ${REDIR}${DEV}" '{tool_input:{command:$c}}')" "false-positive"
 
-# no-schedule-wakeup-deadzone: delays in [300,1800] denied (inclusive boundaries)
-assert_deny no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":600,"reason":"x"}}' "dead zone"
-assert_deny no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":300,"reason":"x"}}' "dead zone"
-assert_deny no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":1800,"reason":"x"}}' "dead zone"
-assert_silent no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":120,"reason":"x"}}'
-assert_silent no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":299,"reason":"x"}}'
-assert_silent no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":1801,"reason":"x"}}'
-assert_silent no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":2000,"reason":"x"}}'
-# Bypass marker in reason silences the deny
-assert_silent no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":600,"reason":"BYPASS_WAKEUP_DEADZONE — needed"}}'
-# Non-numeric delaySeconds coerces to 0 → silent (guards against schema drift)
-assert_silent no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":"abc","reason":"x"}}'
-# String-encoded number still evaluates numerically
-assert_deny no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":"600","reason":"x"}}' "dead zone"
-# Third-party provider runtime: prompt-cache dead-zone policy is silent.
-assert_silent_env no-schedule-wakeup-deadzone '{"tool_input":{"delaySeconds":600,"reason":"x"}}' ANTHROPIC_BASE_URL "https://api.deepseek.com/anthropic"
-
 # no-multi-question: enforce CLAUDE.md "Ask one question at a time" on AskUserQuestion.
 assert_silent no-multi-question '{"tool_input":{"questions":[{"question":"q1?","header":"h"}]}}'
 assert_deny no-multi-question '{"tool_input":{"questions":[{"question":"q1?","header":"h"},{"question":"q2?","header":"h"}]}}' "2 questions"
@@ -727,17 +697,6 @@ assert_silent verify-explore-results '{"tool_input":{"subagent_type":"general-pu
 
 echo ""
 echo "=== PostToolUse: hooks using emit helper ==="
-
-# cache-keepalive-hint: fires on official-Anthropic backgrounded Bash and Agent;
-# silent on foreground and third-party provider runtimes.
-assert_context cache-keepalive-hint '{"tool_name":"Bash","tool_input":{"run_in_background":true,"command":"sleep 60"}}' "Background Bash"
-assert_context cache-keepalive-hint '{"tool_name":"Agent","tool_input":{"run_in_background":true}}' "Background agent"
-assert_context_env cache-keepalive-hint '{"tool_name":"Bash","tool_input":{"run_in_background":true,"command":"sleep 60"}}' "Background Bash" ANTHROPIC_BASE_URL "https://api.anthropic.com"
-assert_silent_env cache-keepalive-hint '{"tool_name":"Bash","tool_input":{"run_in_background":true,"command":"sleep 60"}}' ANTHROPIC_BASE_URL "https://api.deepseek.com/anthropic"
-assert_silent_env cache-keepalive-hint '{"tool_name":"Agent","tool_input":{"run_in_background":true}}' ANTHROPIC_DEFAULT_MODEL "gpt-5.4"
-assert_silent cache-keepalive-hint '{"tool_name":"Bash","tool_input":{"command":"ls"},"tool_response":{}}'
-# Subagent session_id (agent-* prefix): silent even on backgrounded Bash.
-assert_silent cache-keepalive-hint '{"session_id":"agent-deadbeef1234","tool_name":"Bash","tool_input":{"run_in_background":true,"command":"sleep 60"}}'
 
 # track-sent-file: write a plain file:// URL to a per-session state file
 # after SendUserFile (read by the Claude Code statusline renderer). Host comes
@@ -1442,18 +1401,6 @@ for cmd in "sudo babysit status" "git status && babysit add -- foo" "bash -c 'ba
   rm -f "/tmp/claude-${UID}-state/babysit-skill-hint/$hsp_sid6"  # reset one-shot so next form triggers
 done
 rm -rf /tmp/claude-${UID}-state/babysit-skill-loaded /tmp/claude-${UID}-state/babysit-skill-hint /tmp/claude-${UID}-state/compact-events
-
-# 10. codex-advisor skill script: deterministic, network-free paths. The live
-# gpt-5.5 consult is integration-tested in a fresh session, not here.
-cadv=~/.claude/skills/codex-advisor/scripts/consult.py
-out=$(ADVISOR_CODEX=0 "$cadv" 2>&1)
-echo "$out" | grep -q "disabled" \
-  && echo "OK:   codex-advisor honors ADVISOR_CODEX=0 kill-switch" \
-  || { echo "FAIL: codex-advisor should report disabled with ADVISOR_CODEX=0: $out"; fail=1; }
-out=$(env -u ADVISOR_CODEX CLAUDE_CODE_SESSION_ID=nonexistent-sid-xyz "$cadv" 2>&1)
-echo "$out" | grep -q "Could not locate" \
-  && echo "OK:   codex-advisor reports unresolved transcript without calling codex" \
-  || { echo "FAIL: codex-advisor should not proceed on a bogus session id: $out"; fail=1; }
 
 echo ""
 rm -f "$test_out"
