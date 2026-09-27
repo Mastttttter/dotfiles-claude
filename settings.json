@@ -18,8 +18,7 @@
     "AUDIT_CODEX_EFFORT": "medium",
     "AUDIT_CLAUDE_MODEL": "haiku",
     "AUDIT_CLAUDE_EFFORT": "high",
-    "CAVEMAN_DEFAULT_MODE": "ultra",
-    "ENABLE_PROMPT_CACHING_1H": "1"
+    "CAVEMAN_DEFAULT_MODE": "ultra"
   },
   "attribution": {
     "sessionUrl": false
@@ -467,6 +466,8 @@
       "effortLevel": "xhigh"
     }
   },
+  "promptCacheTtl": "1h",
+  "subagentPromptCacheTtl": "5m",
   "advisorModel": "opus",
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,

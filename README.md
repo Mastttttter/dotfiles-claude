@@ -43,7 +43,8 @@ For reference, my personal configs that pair well with this setup:
 - **hooks/** — guardrails for safe tool use (block heredocs, enforce Write tool, etc.)
 - **skills/** — 53 skill packs (browser automation, translation, shader dev, and more)
 - **plugins/** — installed plugins via marketplaces (`claude-hud`, `claude-plugins-official`, `openai-codex`)
-- **integration.sh / .fish** — `claude` wrapper, model shortcuts, and `commit` helper
+- **integration.sh / .fish** — `claude` wrapper and model shortcuts
+- **bin/claude-commit** — standalone commit helper using Haiku
 - **integration-providers.sh / .fish** — optional shortcuts that route claude through third-party Anthropic-compatible endpoints (glm/deepseek/qwen/ofox; see the file header for the API key each maps to).
 - **CLAUDE.md** — global coding preferences and rules
 
