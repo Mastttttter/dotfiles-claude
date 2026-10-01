@@ -31,7 +31,6 @@
       "/tmp"
     ]
   },
-  "model": "opus",
   "enableAllProjectMcpServers": true,
   "skillOverrides": {
     "init": "user-invocable-only",
@@ -40,7 +39,9 @@
     "claude-api": "user-invocable-only",
     "keybindings-help": "user-invocable-only",
     "schedule": "user-invocable-only",
-    "design": "user-invocable-only"
+    "design": "user-invocable-only",
+    "morning": "user-invocable-only",
+    "import-memory": "user-invocable-only"
   },
   "hooks": {
     "PreToolUse": [
@@ -461,8 +462,15 @@
     }
   },
   "viewMode": "default",
-  "effortLevel": "xhigh",
-  "advisorModel": "fable",
+  "effortLevel": "high",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "xhigh"
+    }
+  },
+  "promptCacheTtl": "1h",
+  "subagentPromptCacheTtl": "5m",
+  "advisorModel": "opus",
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,
   "tui": "fullscreen",
