@@ -2,6 +2,18 @@
   "cleanupPeriodDays": 3650,
   "skillListingBudgetFraction": 0.05,
   "env": {
+    "ANTHROPIC_AUTH_TOKEN": "1234",
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8317/",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-6.1-sol",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "gpt-6.1-sol",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "gpt-6.1-sol",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "gpt-6.1-sol",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "gpt-6-astra",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME": "gpt-6-astra",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-6-luna",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "gpt-6-luna",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-6-luna",
+    "ANTHROPIC_MODEL": "gpt-6-luna",
     "IS_DEMO": "1",
     "ENABLE_CLAUDEAI_MCP_SERVERS": "true",
     "CLAUDE_CODE_FORK_SUBAGENT": "1",
@@ -31,6 +43,7 @@
       "/tmp"
     ]
   },
+  "model": "opus",
   "enableAllProjectMcpServers": true,
   "skillOverrides": {
     "init": "user-invocable-only",
@@ -41,7 +54,13 @@
     "schedule": "user-invocable-only",
     "design": "user-invocable-only",
     "morning": "user-invocable-only",
-    "import-memory": "user-invocable-only"
+    "import-memory": "user-invocable-only",
+    "codex:rescue": "off",
+    "codex:setup": "off",
+    "codex:codex-cli-runtime": "off",
+    "codex:codex-result-handling": "off",
+    "codex:gpt-5-4-prompting": "off",
+    "jina-ai": "off"
   },
   "hooks": {
     "PreToolUse": [
@@ -462,14 +481,23 @@
     }
   },
   "viewMode": "default",
+  "promptCacheTtl": "1h",
+  "subagentPromptCacheTtl": "5m",
   "effortLevel": "high",
   "modelSettings": {
     "claude-opus-5-5": {
       "effortLevel": "xhigh"
+    },
+    "gpt-6.1-sol": {
+      "effortLevel": "xhigh"
+    },
+    "gpt-6-astra": {
+      "effortLevel": "xhigh"
+    },
+    "gpt-6-luna": {
+      "effortLevel": "xhigh"
     }
   },
-  "promptCacheTtl": "1h",
-  "subagentPromptCacheTtl": "5m",
   "advisorModel": "opus",
   "awaySummaryEnabled": true,
   "showClearContextOnPlanAccept": true,
