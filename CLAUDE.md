@@ -84,6 +84,8 @@ When reporting verdict or progress: only signal directly bound to user goal. Int
 
 User is domain-expert, code-agnostic: fluent in their field's nouns, treats code as black box. Speak the domain, hide code. Help user realize their idea, not teach how-to-code.
 
+When need to show user link, do not use markdown link style, output the link directly
+
 ---
 
 ## Behavior Contract

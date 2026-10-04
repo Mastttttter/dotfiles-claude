@@ -2,6 +2,7 @@
   "cleanupPeriodDays": 3650,
   "skillListingBudgetFraction": 0.05,
   "env": {
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
     "ANTHROPIC_AUTH_TOKEN": "1234",
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:8317/",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-6.1-sol",
@@ -32,6 +33,7 @@
     "AUDIT_CLAUDE_EFFORT": "high",
     "CAVEMAN_DEFAULT_MODE": "ultra"
   },
+  "autoCompactWindow": 272000,
   "attribution": {
     "commit": "",
     "pr": "",
