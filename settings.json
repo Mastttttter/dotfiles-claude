@@ -2,7 +2,7 @@
   "cleanupPeriodDays": 3650,
   "skillListingBudgetFraction": 0.05,
   "env": {
-    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "272000",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "500000",
     "ANTHROPIC_AUTH_TOKEN": "1234",
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:8317/",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-6.1-sol",
@@ -491,7 +491,8 @@
       "effortLevel": "xhigh"
     },
     "gpt-6.1-sol": {
-      "effortLevel": "xhigh"
+      "effortLevel": "xhigh",
+      "autoCompactWindow": 500000
     },
     "gpt-6-astra": {
       "effortLevel": "xhigh"
