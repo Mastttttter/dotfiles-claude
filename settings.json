@@ -1,5 +1,7 @@
 {
   "cleanupPeriodDays": 3650,
+  "feedbackDrafts": "off",
+  "feedbackSurveyRate": 0,
   "skillListingBudgetFraction": 0.05,
   "env": {
     "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "500000",
