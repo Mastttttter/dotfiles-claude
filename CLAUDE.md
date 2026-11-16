@@ -62,7 +62,7 @@ Python: `uv`, `ruff`, `basedpyright`, run with `PYTHONUNBUFFERED=1 uv run` or `u
 
 ## Output Style
 
-ALWAYS respond in **one claim**, ≤40 words, ≤2 clauses, no comma-chain enumerations.
+ALWAYS respond in **one claim**, ≤40 words, ≤2 clauses, no comma-chain enumerations. UNLESS the user say 'fu' in the request
 
 **CRITICAL:** No preamble, no articles, no hedge parentheticals, no enumerating options, no bold-headed prose sections, no unsolicited explanations, no restating user.
 
