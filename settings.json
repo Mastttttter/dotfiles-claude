@@ -7,16 +7,16 @@
     "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "500000",
     "ANTHROPIC_AUTH_TOKEN": "1234",
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:8317/",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-6.1-sol",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "gpt-6.1-sol",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "gpt-6.1-sol",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "gpt-6.1-sol",
-    "ANTHROPIC_DEFAULT_FABLE_MODEL": "gpt-6-astra",
-    "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME": "gpt-6-astra",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-6.1-sol",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "gpt-6.1-sol",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-6.1-sol",
-    "ANTHROPIC_MODEL": "gpt-6.1-sol",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-6.2-sol",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "gpt-6.2-sol",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "gpt-6.2-sol",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "gpt-6.2-sol",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "gpt-6.2-astra",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME": "gpt-6.2-astra",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-6.2-sol",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "gpt-6.2-sol",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-6.2-sol",
+    "ANTHROPIC_MODEL": "gpt-6.2-sol",
     "IS_DEMO": "1",
     "ENABLE_CLAUDEAI_MCP_SERVERS": "true",
     "CLAUDE_CODE_FORK_SUBAGENT": "1",
@@ -29,7 +29,7 @@
     "CLAUDE_CODE_NEW_INIT": "1",
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
     "AUDIT_BACKEND": "none",
-    "AUDIT_CODEX_MODEL": "gpt-6.1-sol",
+    "AUDIT_CODEX_MODEL": "gpt-6.2-sol",
     "AUDIT_CODEX_EFFORT": "medium",
     "AUDIT_CLAUDE_MODEL": "haiku",
     "AUDIT_CLAUDE_EFFORT": "high",
@@ -492,14 +492,14 @@
     "claude-opus-5-5": {
       "effortLevel": "xhigh"
     },
-    "gpt-6.1-sol": {
+    "gpt-6.2-sol": {
       "effortLevel": "xhigh",
       "autoCompactWindow": 500000
     },
-    "gpt-6-astra": {
+    "gpt-6.2-astra": {
       "effortLevel": "xhigh"
     },
-    "gpt-6-luna": {
+    "gpt-6.2-luna": {
       "effortLevel": "xhigh"
     }
   },
